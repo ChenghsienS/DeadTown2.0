@@ -1,14 +1,14 @@
-# V1.1.6 → V1.1.7 更新
+# V1.1.7 → V1.1.8 更新
 
-下载更新包不会自动更新网站。
+下载更新包不会自动更新网站。前端与多人服务器必须一起更新。
 
 ## 上传 GitHub
 
 打开 https://github.com/ChenghsienS/DeadTown2.0 ，点击 Add file → Upload files。
 
-解压 DeadTown-V1.1.7-update.zip，进入 DeadTown 文件夹，将里面的文件和文件夹上传到仓库根目录，提交覆盖同名文件。不要上传 ZIP 本身，不要再套一层 DeadTown 文件夹。更新包仅包含变化的文件，美术和声音资源不需重传。
+解压 DeadTown-V1.1.8-update.zip，进入 DeadTown 文件夹，将里面的文件和文件夹全部上传到仓库根目录，提交更新同名文件。不要上传 ZIP 本身，不要再套一层 DeadTown 文件夹。
 
-新增的 player-skins.js、squad-ui.js 必须与 index、network、game、server、server 文件夹、package/version 等修改一起上传，不要只替换其中一部分。
+此次更新包包含本次变化文件和完整 tests 文件夹，补齐此前缺少的测试。请连同 tests、verification 文件夹上传；声音和其他未变化资源不必重传。原仓库其他文件保留，不要清空仓库。
 
 ## VPS 更新
 
@@ -21,21 +21,21 @@ npm run check &&
 systemctl restart deadtown
 ```
 
-如果拉取或检查失败，后续重启不会执行；请保留错误文字。内置 WebSocket 依赖不变，不必重新安装 npm 包。
+如果拉取或检查失败，后续重启不会执行；请保留错误文字。内置 WebSocket 依赖未变，无须重新安装 npm 包。
 
-检查运行状态：
+完成后单独执行：
 
 ```bash
 systemctl is-active deadtown
 curl -fsS http://127.0.0.1:3000/health
 ```
 
-应显示 active，健康接口 version 应为 1.1.7。
+应显示 active，健康接口 version 应为 1.1.8。只看到主页 V1.1.8 并不代表服务器已重启，应同时确认健康接口版本。
 
-Nginx、域名、证书、现有 systemd 的 MAX_ROOMS 设置不需修改。重启会结束现有房间，应在无人对局时更新。
+Nginx、域名、证书、systemd 配置均不需修改。重启会结束现有房间，应在无人对局时更新。
 
 ## 刷新与试玩
 
-所有玩家按 Ctrl + F5，确认主页 V1.1.7。检查角色选择和配色，按 Enter 发送房间消息，验证倒地者匍匐、队友站定 5 秒救援、20% 复活血量及队伍个人排名。对照游戏内 Ping 与 FPS 评估体验。
+所有玩家按 Ctrl + F5，确认主页 V1.1.8。测试燃烧倒地后由队友救起，确认旧火焰已消失；自然熄灭的丧尸也不应残留火焰。分别设置角色配色，切换角色检查记忆，再在结算界面选择外观并重开。当前操控角色附近应更亮，墙后仍应遮光。
 
-完整项目目录内可以运行 npm test，使用 Node.js 22+。测试使用独立临时房间，不写入真实排行榜。
+完整项目及上传完整 tests 后可运行 npm test（Node.js 22+）。测试使用独立临时房间，不写入真实排行榜。本包未自动部署到线上。

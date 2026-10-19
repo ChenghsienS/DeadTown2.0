@@ -60,6 +60,7 @@ const Coop = (() => {
       else{p.reviverId=null;p.reviveProgress=0;}
       if(p.downRemaining>1e-8&&p.reviveProgress+1e-8>=rescue.duration){
         p.downed=false;p.hp=Math.max(1,p.maxHp*.2);p.downRemaining=0;p.reviveProgress=0;p.reviverId=null;p.reviveShield=1.5;p.hurtTimer=1.5;
+        Burning.clear(p);
         p.input={keys:new Set(),fire:false,actions:[]};emit('playerRevive',{id:p.id,name:p.name,helperId:helper.id});
       }else if(p.downRemaining<=1e-8)finishDeath(p);
     }

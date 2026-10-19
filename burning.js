@@ -51,7 +51,7 @@ const Burning=(()=>{
     // Fixed tiny pixel shapes, no extra per-actor light or unbounded particles.
     ctx.save();
     for(const o of [...Coop.all(),...state.zombies]){
-      if(!o.burn||o.hp<=0)continue;
+      if(!o.burn||o.burn.remaining<=0||o.hp<=0||o.downed||o.dead||o.connected===false)continue;
       const x=o.x-cam.x,y=o.y-cam.y-(Coop.isPlayer(o)?Coop.withPlayer(o,()=>getPlayerJumpVisual().lift):o.lift||0);
       if(x<-60||y<-80||x>SW+60||y>SH+80)continue;
       const fade=Math.min(1,o.burn.remaining/.45),seed=String(o.id||0).split('').reduce((n,c)=>n+c.charCodeAt(0),0)*1.7;

@@ -114,7 +114,7 @@ const PixelArt = (() => {
       rect(c,headW/2-2,headY+2,2,6,p.shade);rect(c,-1,headY+6,3,2,p.shade);
       if(playerSprite){
         rect(c,-5,headY-1,10,3,'#374441');rect(c,-4,headY-1,7,1,'#82917c');rect(c,3,headY+1,4,1,'#273333');
-        if(dir!==2){rect(c,-3,headY+3,7,2,'#24343a');rect(c,-2,headY+3,2,1,'#a1b2af');rect(c,4,headY+6,3,1,'#79543c');rect(c,7,headY+6,1,1,'#c28a54');}
+        if(dir!==2){rect(c,-3,headY+3,7,2,'#24343a');rect(c,-2,headY+3,2,1,'#a1b2af');if(skin==='ranger'){rect(c,4,headY+6,3,1,'#79543c');rect(c,7,headY+6,1,1,'#c28a54');}}
       }else{
         rect(c,-headW/2,headY-1,headW-2,2,variant===1?'#635448':'#414d47');
         if(dir!==2){rect(c,-3,headY+3,2,1,'#292b2a');rect(c,1,headY+3,2,1,'#292b2a');

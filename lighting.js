@@ -5,6 +5,8 @@ const LIGHTING = {
   beamFalloff: 190, // Distance at which the center is about half as bright.
   beamStrength: 0.88,
   ambientDarkness: 0.76,
+  playerFillRadius: 96,
+  playerFillStrength: 0.56,
   tintStrength: 0.035,
   shadowSoftness: 0, // Low-resolution mask supplies anti-aliased edges without per-light blur.
   resolutionScale: 0.65
@@ -214,9 +216,13 @@ const Lighting = (() => {
     const c=illumination.getContext('2d');c.setTransform(1,0,0,1,0,0);c.clearRect(0,0,illumination.width,illumination.height);
     environmentTint.getContext('2d').clearRect(0,0,environmentTint.width,environmentTint.height);
     const objects=casters(cam),townLights=TownArt.lights(cam),supplyLights=airdrops(cam);
-    for(const p of Coop.living()){
+    for(const p of Coop.survivors()){
       const target=Coop.aim(p,cam),angle=Math.atan2(target.y-p.y,target.x-p.x),playerId=p.id||'player';
-      drawLight({x:p.x,y:p.y,radius:52,strength:.22,color:'215,225,235',ignorePlayer:true,playerId},objects,cam);
+      // Local readability uses the existing occluded fill light, not extra
+      // particles. Keep it while crawling; other survivors keep their old fill.
+      const local=p===player;
+      if(local||p.hp>0)drawLight({x:p.x,y:p.y-(local?12:0),radius:local?LIGHTING.playerFillRadius:52,strength:local?LIGHTING.playerFillStrength:.22,color:'215,225,235',ignorePlayer:true,playerId},objects,cam);
+      if(p.downed)continue;
       const source={x:p.x,y:p.y,angle,beam:true,radius:LIGHTING.beamLength,strength:LIGHTING.beamStrength,ignorePlayer:true,playerId};
       if(visible(source,cam))drawLight(source,objects,cam);
     }

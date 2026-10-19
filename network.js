@@ -72,6 +72,9 @@ const Net=(()=>{
     return incoming.map(o=>{let p=previous.get(o.id);const oldDown=!!p?.downed;const x=p?.x??o.x,y=p?.y??o.y;
       if(!p)p={};const art={};for(const k of ['artX','artY','animPhase','artFacing','artMoving','artRecoil','artShotUntil','artShotAngle','artShotKind','artDownAge'])if(k in p)art[k]=p[k];
       Object.assign(p,o,art);
+      // These are full authoritative snapshots. An omitted burn means it ended;
+      // Object.assign alone would resurrect the old flames after a revival.
+      if(!o.burn||o.burn.remaining<=0||o.hp<=0||o.downed||o.dead)Burning.clear(p);
       const previousTarget=targets.get(key+o.id),time=performance.now(),elapsed=previousTarget?(time-previousTarget.at)/1000:0;
       const vx=elapsed>.025&&elapsed<.5?(o.x-previousTarget.x)/elapsed:0,vy=elapsed>.025&&elapsed<.5?(o.y-previousTarget.y)/elapsed:0;
       const future={...o};
@@ -118,7 +121,16 @@ const Net=(()=>{
   function receive(m){
     if(m.type==='welcome'){clearTimeout(connectTimer);connected=true;id=m.id;serverName=m.name;status='';inputTimer=setInterval(transmit,33);screen='';}
     else if(m.type==='lobby'){rooms=m.rooms;serverName=m.name;if(!room)renderLobby();}
-    else if(m.type==='room'){const old=room;room=m.room;countdownRemaining=room.startsInMs||0;countdownAt=performance.now();if(room.status==='waiting'||room.status==='starting')renderRoom();else if(room.status==='ended'&&!endAt){endAt=performance.now()+1800;}else if(old?.hostId!==room.hostId&&menu)renderMenu();}
+    else if(m.type==='room'){
+      const old=room;room=m.room;countdownRemaining=room.startsInMs||0;countdownAt=performance.now();
+      if(room.status==='waiting'||room.status==='starting')renderRoom();
+      else if(room.status==='ended'){
+        // Once the report is visible, refresh cosmetics, members and controls
+        // immediately. Only the initial transition waits for the death animation.
+        if(screen==='room'){endAt=0;renderRoom();}
+        else if(!endAt)endAt=performance.now()+1800;
+      }else if(old?.hostId!==room.hostId&&menu)renderMenu();
+    }
     else if(m.type==='chat')SquadUI.receive(m.message);
     else if(m.type==='chatHistory')SquadUI.history(m.messages);
     else if(m.type==='start')begin(m.snapshot);
