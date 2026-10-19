@@ -1,7 +1,7 @@
 const silent=()=>{};
 const silentModule=new Proxy({isOpen:false,armed:false,settingsHTML:()=>'',stats:{}},{get:(o,k)=>o[k]??silent});
 const TownArt=silentModule,Lighting=silentModule,FrameStats=silentModule,DevHorde=silentModule,ArtStudio=silentModule;
-const AudioEngine={reset:silent,silenceCombat:silent,play(name,options={}){Coop.emit('audio',{name,options:{...options,x:options.x??player.x,y:options.y??player.y}});},variant(name,count,options={}){Coop.emit('audio',{name,count,options:{...options,x:options.x??player.x,y:options.y??player.y}});},thunder(x,y,grounded){Coop.emit('thunder',{x,y,grounded});}};
+const AudioEngine={reset:silent,silenceCombat:silent,play(name,options={}){Coop.emit('audio',{name,ownerId:player.id,options:{...options,x:options.x??player.x,y:options.y??player.y}});},variant(name,count,options={}){Coop.emit('audio',{name,count,ownerId:player.id,options:{...options,x:options.x??player.x,y:options.y??player.y}});},thunder(x,y,grounded){Coop.emit('thunder',{x,y,grounded});}};
 const ensureAudio=silent,startBGM=silent,setBGMLevel=silent,playMenuOpen=silent,playMenuClick=silent;
 function playShot(kind){} // Shot events drive client audio and muzzle animation together.
 function playReload(kind){AudioEngine.play('reload_'+(kind==='arc'?'rocket':kind),{volume:.38});}
@@ -21,7 +21,7 @@ const PixelArt={reset:silent,update(dt){for(const o of [...Coop.all(),...state.z
     const length=o.weapon==='arc'?32:o.weapon==='rocket'||o.weapon==='flamethrower'?30:28;
     return {angle,dx,dy,flip,x,y,targetX,targetY,muzzleX:x+dx*length,muzzleY:y+dy*length,sector:((Math.round(angle/(Math.PI/4))%8)+8)%8};
   },
-  shot(angle,kind){Coop.emit('shot',{id:player.id,x:player.x,y:player.y,angle,kind});},
+  shot(angle,kind){Coop.emit('shot',{id:player.id,x:player.x,y:player.y,angle,kind,shotId:player.shotSerial});},
   hit(o){o.artHit=.13;},
   death(z,cause){Coop.emit('death',{z:{...z},cause});}
 };

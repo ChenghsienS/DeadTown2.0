@@ -10,6 +10,6 @@ setInterval(()=>{
   const now=performance.now();accumulator+=Math.min(.2,(now-before)/1000);before=now;
   let work=0;
   while(accumulator>=1/30&&work++<6){sim.step();accumulator-=1/30;ticks++;}
-  if(ticks>=3){ticks%=3;const snapshot=sim.snapshot();parentPort.postMessage({type:'snapshot',snapshot});
-    if(snapshot.world.gameOver&&!ended){ended=true;parentPort.postMessage({type:'ended',score:snapshot.world.score,kills:snapshot.world.kills,time:snapshot.world.surviveTime});}}
+  if(ticks>=2){ticks%=2;const snapshot=sim.frame();parentPort.postMessage({type:'snapshot',payload:snapshot.payload});
+    if(snapshot.gameOver&&!ended){ended=true;parentPort.postMessage({type:'ended',score:snapshot.score,kills:snapshot.kills,time:snapshot.time});}}
 },10);

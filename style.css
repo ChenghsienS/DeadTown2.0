@@ -26,7 +26,7 @@
 .hordeController .controls button{grid-column:1/-1}.hordeController p{line-height:1.6}
 
 /* Multiplayer uses the existing terminal palette and sharp pixel edges. */
-.onlineButton{display:flex;justify-content:space-between;width:100%;margin:8px 0 14px;border-color:#58664d;color:#c8d5b4;background:#202a20}
+.onlineButton{display:flex;justify-content:space-between;width:100%;margin:8px 0 14px}
 .netCard{width:min(960px,calc(100vw - 36px));max-height:calc(100vh - 36px);overflow:auto}
 .netHeading{display:flex;align-items:center;justify-content:space-between;gap:20px}
 .netIdentity{border:1px solid #495345;padding:8px 12px;color:#b6c99d;overflow-wrap:anywhere}
@@ -39,3 +39,5 @@
 .netMessage{min-height:20px;color:#e2ad7d;font-size:12px;margin:12px 0 0}.netMembers{margin:22px 0}.netMember{display:flex;align-items:center;gap:16px;border-bottom:1px solid #354033;padding:15px 0}.netBadge{color:#a7bc87;border:1px solid #4d5d41;background:#253121;padding:10px;font-size:14px}.netMember strong{flex:1;font-size:15px;overflow-wrap:anywhere}.netMember small{display:block;font-size:9px;color:#8b9982;letter-spacing:1px;margin-top:7px;font-weight:normal}.netResult{display:flex;align-items:center;justify-content:space-between;border:1px solid #48543c;background:#20291d;padding:20px;margin:20px 0}.netResult strong{font-size:32px;color:#c0d393}.netResult small{display:block;font-size:10px;color:#96a885}.netResult>span{color:#b2beaa;font-size:13px}
 #netStatus{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:8;background:#101813e8;border:1px solid #495345;padding:7px 13px;color:#b6c99d;font:11px "Courier New","Microsoft YaHei",monospace;pointer-events:none;text-align:center;max-width:90vw}#netStatus.warning{color:#f2ba80;border-color:#9a6441}
 @media(max-width:680px){.netColumns{grid-template-columns:1fr}.netHeading{align-items:flex-start;flex-direction:column;gap:4px}.netRoomRow{grid-template-columns:minmax(0,1fr) auto}.netRoomRow>.netState{display:none}.netCard .screenBody{padding:20px}.netResult{gap:12px;flex-wrap:wrap}}
+
+.netCountdown{display:flex;align-items:center;gap:18px;padding:14px 18px;margin-top:16px;border:1px solid var(--red);background:#291c19}.netCountdown strong{font-size:32px;color:var(--red);font-variant-numeric:tabular-nums}.netCountdown span{line-height:1.6}

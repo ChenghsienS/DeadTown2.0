@@ -2,9 +2,10 @@
 const Net=(()=>{
   let socket=null,id='',rooms=[],room=null,serverName='',screen='',status='',connected=false,menu=false;
   let originalPlayer=null,originalDev=false,sequence=0,actions=[],lastEvent=0,packetAt=0,ping=0,lastPing=0,endAt=0;
+  let lastTransmit=0,flushTimer=null,countdownRemaining=0,countdownAt=0;
   let inputTimer=null,connectTimer=null,lastSnapshot=null,round=0,disconnectReason='';
   const targets=new Map(),zh=()=>lang==='zh',tr=(a,b)=>zh()?a:b;
-  const errors={version:['版本不一致，请刷新网页后重试。','Version mismatch. Refresh this page.'],name:['请输入昵称。','Enter a nickname.'],room_name:['请输入房间名。','Enter a room name.'],capacity:['房间人数只能为 2–4 人。','Capacity must be 2–4.'],password:['房间密码不正确。','Incorrect room password.'],room_full:['房间已满。','Room is full.'],server_full:['服务器房间已满。','Server room limit reached.'],room_missing:['房间已经关闭。','Room no longer exists.'],in_progress:['这一局已经开始，请等待下一局。','This match has started. Wait for the next round.'],host_only:['只有房主可以执行此操作。','Only the room leader can do this.'],not_ready:['需要所有玩家准备后才能开始。','Everyone must be ready.'],slow_down:['操作太快，请稍后重试。','Please wait a moment and try again.'],room_failed:['房间启动失败，可以重新准备后重试。','Room failed to start. Ready up and try again.']};
+  const errors={version:['版本不一致，请刷新网页后重试。','Version mismatch. Refresh this page.'],name:['请输入昵称。','Enter a nickname.'],room_name:['请输入房间名。','Enter a room name.'],capacity:['房间人数只能为 2–4 人。','Capacity must be 2–4.'],password:['房间密码不正确。','Incorrect room password.'],room_full:['房间已满。','Room is full.'],server_full:['服务器房间已满。','Server room limit reached.'],room_missing:['房间已经关闭。','Room no longer exists.'],in_progress:['这一局已经开始，请等待下一局。','This match has started. Wait for the next round.'],host_only:['只有房主可以执行此操作。','Only the room leader can do this.'],slow_down:['操作太快，请稍后重试。','Please wait a moment and try again.'],room_failed:['房间启动失败，可以重新准备后重试。','Room failed to start. Ready up and try again.']};
   function send(data){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(data));}
   function notice(text){status=text;const el=$('netMessage');if(el)el.textContent=text;}
   function chrome(title,body){showMenu('netCard',`${menuHeader(title)}<div class="screenBody">${body}<p id="netMessage" class="netMessage" role="status" aria-live="polite">${escapeHtml(status)}</p></div>${menuFooter()}`);updateCursorVisibility();}
@@ -46,7 +47,7 @@ const Net=(()=>{
   function renderRoom(){
     if(!room)return;screen='room';const own=room.members.find(p=>p.id===id),host=room.hostId===id;
     const waiting=room.status==='waiting',starting=room.status==='starting',ended=room.status==='ended';
-    chrome(tr('行动准备','SQUAD BRIEFING'),`<span class="eyebrow">ROOM ${room.id} / ${room.members.length} OF ${room.capacity}</span><h2>${escapeHtml(room.name)}</h2><p>${tr('同一座小镇，共同抵抗尸潮。拾取物先到先得，燃烧和爆炸仍会伤及队友。','One town, one squad. Supplies go to the first eligible survivor. Fire and explosions can affect teammates.')}</p><div class="netMembers">${room.members.map((p,i)=>`<div class="netMember"><span class="netBadge">0${i+1}</span><strong>${escapeHtml(p.name)} ${p.id===id?tr('（你）','(you)'):''}<small>${p.id===room.hostId?tr('房主','SQUAD LEADER'):tr('幸存者','SURVIVOR')}</small></strong><span class="netState ${p.ready?'ready':''}">${p.ready?tr('已准备','READY'):tr('未准备','NOT READY')}</span></div>`).join('')}</div>${ended&&room.result?`<div class="netResult"><strong>${Math.floor(room.result.score)} <small>${tr('团队分数','TEAM SCORE')}</small></strong><span>${room.result.kills} ${tr('击杀','KILLS')} · ${formatTime(room.result.time)}</span></div><p class="boardNote">${tr('合作成绩不计入单人排行榜。阵亡玩家在下一局重新加入。','Co-op scores do not enter the solo leaderboard. Fallen survivors return next round.')}</p>`:''}<div class="controls">${waiting?`<button id="netReady" class="primary">${own?.ready?tr('取消准备','Cancel ready'):tr('准备','Ready up')}</button>${host?`<button id="netStart" ${room.members.some(p=>!p.ready)?'disabled':''}>${tr('开始行动','Start match')} →</button>`:''}`:starting?`<button disabled>${tr('正在生成小镇…','Generating town…')}</button>`:ended&&host?`<button id="netRematch" class="primary">${tr('准备下一局','Next round')} →</button>`:''}<button id="netLeave">${tr('离开房间','Leave room')}</button></div><p class="boardNote">${waiting?tr('所有玩家准备后，由房主开始。开局后不允许中途加入。','The leader starts after everyone is ready. No joining during a match.'):ended&&!host?tr('等待房主开启下一局。','Waiting for the leader to open the next round.'):''}</p>`);
+    chrome(tr('行动准备','SQUAD BRIEFING'),`<span class="eyebrow">ROOM ${room.id} / ${room.members.length} OF ${room.capacity}</span><h2>${escapeHtml(room.name)}</h2><p>${tr('同一座小镇，共同抵抗尸潮。拾取物先到先得，燃烧和爆炸仍会伤及队友。','One town, one squad. Supplies go to the first eligible survivor. Fire and explosions can affect teammates.')}</p><div class="netMembers">${room.members.map((p,i)=>`<div class="netMember"><span class="netBadge">0${i+1}</span><strong>${escapeHtml(p.name)} ${p.id===id?tr('（你）','(you)'):''}<small>${p.id===room.hostId?tr('房主','SQUAD LEADER'):tr('幸存者','SURVIVOR')}</small></strong><span class="netState ${p.ready?'ready':''}">${p.ready?tr('已准备','READY'):tr('未准备','NOT READY')}</span></div>`).join('')}</div>${ended&&room.result?`<div class="netResult"><strong>${Math.floor(room.result.score)} <small>${tr('团队分数','TEAM SCORE')}</small></strong><span>${room.result.kills} ${tr('击杀','KILLS')} · ${formatTime(room.result.time)}</span></div><p class="boardNote">${tr('合作成绩不计入单人排行榜。阵亡玩家在下一局重新加入。','Co-op scores do not enter the solo leaderboard. Fallen survivors return next round.')}</p>`:''}${waiting&&room.startsInMs>0?`<div class="netCountdown" role="status" aria-live="polite"><strong id="netCountdownValue">${Math.ceil(room.startsInMs/1000)}</strong><span>${tr('全员准备完毕，即将开始','Everyone is ready. Starting soon.')}<br><small>${tr('取消准备可停止倒计时','Cancel ready to stop the countdown.')}</small></span></div>`:''}<div class="controls">${waiting?`<button id="netReady" class="primary">${own?.ready?tr('取消准备','Cancel ready'):tr('准备','Ready up')}</button>${host?`<button id="netStart">${tr('立即开始','Start now')} →</button>`:''}`:starting?`<button disabled>${tr('正在生成小镇…','Generating town…')}</button>`:ended&&host?`<button id="netRematch" class="primary">${tr('准备下一局','Next round')} →</button>`:''}<button id="netLeave">${tr('离开房间','Leave room')}</button></div><p class="boardNote">${waiting?tr('房主可随时立即开始。全员准备后自动倒计时 5 秒；取消准备或人员变动会重置倒计时。开局后不可加入。','The leader can start anytime. Everyone ready starts a 5-second countdown; readiness or roster changes reset it. No joining during a match.'):ended&&!host?tr('等待房主开启下一局。','Waiting for the leader to open the next round.'):''}</p>`);
     $('netReady')&&($('netReady').onclick=()=>send({type:'ready'}));$('netStart')&&($('netStart').onclick=()=>send({type:'start'}));$('netRematch')&&($('netRematch').onclick=()=>send({type:'rematch'}));$('netLeave').onclick=leave;
   }
   function renderMenu(){
@@ -58,7 +59,7 @@ const Net=(()=>{
     menu=!menu;state.paused=menu;state.keys.clear();mouseDown=false;actions=[];transmit();
     if(menu)renderMenu();else{screen='game';$('overlay').classList.add('hidden');}updateGameUI();updateCursorVisibility();
   }
-  function resetVisuals(){BossAttack.reset();PixelArt.reset();Arsenal.reset();Weather.reset();Lighting.reset();state.keys.clear();mouseDown=false;actions=[];targets.clear();}
+  function resetVisuals(){BossAttack.reset();PixelArt.reset();Arsenal.reset();Weather.reset();Lighting.reset();state.keys.clear();mouseDown=false;actions=[];targets.clear();NetPrediction.reset();clearTimeout(flushTimer);flushTimer=null;}
   function begin(s){
     round++;lastEvent=0;lastSnapshot=null;sequence=0;endAt=0;menu=false;screen='game';status='';resetVisuals();
     player={...originalPlayer,maxHp:100,hp:100};Coop.setRoster([player]);resetGame(s.seed);state.devMode=false;state.loading=false;state.loadDone=true;
@@ -68,7 +69,18 @@ const Net=(()=>{
     const previous=new Map(old.map(o=>[o.id,o]));
     return incoming.map(o=>{let p=previous.get(o.id);const x=p?.x??o.x,y=p?.y??o.y;
       if(!p)p={};const art={};for(const k of ['artX','artY','animPhase','artFacing','artMoving','artRecoil','artShotUntil','artShotAngle','artShotKind'])if(k in p)art[k]=p[k];
-      Object.assign(p,o,art);targets.set(key+o.id,{x:o.x,y:o.y});if(!initial){p.x=x;p.y=y;}return p;
+      Object.assign(p,o,art);
+      const previousTarget=targets.get(key+o.id),time=performance.now(),elapsed=previousTarget?(time-previousTarget.at)/1000:0;
+      const vx=elapsed>.025&&elapsed<.5?(o.x-previousTarget.x)/elapsed:0,vy=elapsed>.025&&elapsed<.5?(o.y-previousTarget.y)/elapsed:0;
+      const future={...o};
+      if(Math.hypot(vx,vy)<650){
+        if(key==='d'||BossAttack.airborne(o)){future.x+=vx*.065;future.y+=vy*.065;}
+        else if(key!=='p'||o.id!==id)moveWithWallCollision(future,vx*.065,vy*.065);
+      }
+      targets.set(key+o.id,{x:o.x,y:o.y,at:time,vx,vy,futureX:future.x,futureY:future.y});
+      if(!initial){p.x=x;p.y=y;}
+      if(key==='p'&&o.id===id)NetPrediction.reconcile(o,p,initial);
+      return p;
     });
   }
   function applySnapshot(s,initial=false){
@@ -89,19 +101,20 @@ const Net=(()=>{
     if(s.world.gameOver&&!endAt){endAt=performance.now()+1800;state.paused=false;menu=false;}
     updateHUD();updateDevPanel();
   }
+  function suppressArcAudio(){return NetPrediction.shotConfirmed({shotId:player.shotSerial,kind:'arc'});}
   function effect(e){
     const d=e.data;
     if(e.type==='death')PixelArt.death(d.z,d.cause);
     else if(e.type==='playerDeath'){const p=Coop.byId(d.id);if(p)Coop.withPlayer(p,()=>PixelArt.playerDeath());}
-    else if(e.type==='shot'){const p=Coop.byId(d.id);if(p)Coop.withPlayer(p,()=>{PixelArt.shot(d.angle,d.kind);AudioEngine.shot(d.kind);if(d.id===id)Lighting.flash(d.angle,d.kind);});}
-    else if(e.type==='audio'){if(d.count)AudioEngine.variant(d.name,d.count,d.options);else AudioEngine.play(d.name,d.options);}
+    else if(e.type==='shot'){if(d.id===id&&NetPrediction.shotConfirmed(d))return;const p=Coop.byId(d.id);if(p)Coop.withPlayer(p,()=>{PixelArt.shot(d.angle,d.kind);if(d.kind!=='arc')AudioEngine.shot(d.kind);if(d.id===id&&d.kind!=='arc')Lighting.flash(d.angle,d.kind);});}
+    else if(e.type==='audio'){if(d.ownerId===id&&((d.name==='roll'&&performance.now()-NetPrediction.lastDashAt<1000)||(d.name==='arc_shot'&&suppressArcAudio())))return;if(d.count)AudioEngine.variant(d.name,d.count,d.options);else AudioEngine.play(d.name,d.options);}
     else if(e.type==='thunder')AudioEngine.thunder(d.x,d.y,d.grounded);
     else if(e.type==='notice'&&d.id===id){state.buffAnnouncementType=d.kind==='serum'?'upgrade':'equipment';state.buffAnnouncement=d.kind==='serum'?T[lang]['serum'+({damage:'Damage',speed:'Speed',health:'Health'}[d.value])]:tr('空投：','Airdrop: ')+T[lang][d.value];state.buffAnnouncementTimer=2.6;}
   }
   function receive(m){
     if(m.type==='welcome'){clearTimeout(connectTimer);connected=true;id=m.id;serverName=m.name;status='';inputTimer=setInterval(transmit,33);screen='';}
     else if(m.type==='lobby'){rooms=m.rooms;serverName=m.name;if(!room)renderLobby();}
-    else if(m.type==='room'){const old=room;room=m.room;if(room.status==='waiting'||room.status==='starting')renderRoom();else if(room.status==='ended'&&!endAt){endAt=performance.now()+1800;}else if(old?.hostId!==room.hostId&&menu)renderMenu();}
+    else if(m.type==='room'){const old=room;room=m.room;countdownRemaining=room.startsInMs||0;countdownAt=performance.now();if(room.status==='waiting'||room.status==='starting')renderRoom();else if(room.status==='ended'&&!endAt){endAt=performance.now()+1800;}else if(old?.hostId!==room.hostId&&menu)renderMenu();}
     else if(m.type==='start')begin(m.snapshot);
     else if(m.type==='snapshot')applySnapshot(m.snapshot);
     else if(m.type==='left'){lastSnapshot=null;$('netStatus')?.classList.add('hidden');resetVisuals();room=null;menu=false;screen='';state.running=false;state.gameOver=false;state.paused=false;endAt=0;Coop.setRoster([player]);}
@@ -110,19 +123,42 @@ const Net=(()=>{
     else if(m.type==='pong'&&Number.isFinite(m.at))ping=Math.max(0,Date.now()-m.at);
   }
   function transmit(){
-    if(!connected)return;
+    clearTimeout(flushTimer);flushTimer=null;
+    if(!connected)return;lastTransmit=performance.now();
     if(Date.now()-lastPing>2000){lastPing=Date.now();send({type:'ping',at:lastPing});}
     if(room?.status!=='playing'||!lastSnapshot)return;
     const stale=performance.now()-packetAt>1500,active=!menu&&!document.hidden&&!stale&&player.hp>0;
     const aim=Coop.aim(player,camera());
-    send({type:'input',seq:++sequence,keys:active?[...state.keys]:[],aimX:aim.x,aimY:aim.y,fire:active&&mouseDown,actions:active?actions.splice(0):[]});if(!active)actions=[];
+    NetPrediction.remember(++sequence);
+    send({type:'input',seq:sequence,keys:active?[...state.keys]:[],aimX:aim.x,aimY:aim.y,fire:active&&mouseDown,actions:active?actions.splice(0):[]});if(!active)actions=[];
+  }
+  function flushInput(){
+    if(!connected)return;
+    // Send edges promptly; coalesce same-frame events instead of flooding the socket.
+    const wait=12-(performance.now()-lastTransmit);
+    if(wait<=0)transmit();else if(!flushTimer)flushTimer=setTimeout(transmit,wait);
+  }
+  function action(kind){
+    if(menu||player.hp<=0||performance.now()-packetAt>1500)return;
+    if(actions.length<5)actions.push(kind);NetPrediction.action(kind);flushInput();
   }
   function update(dt){
+    const counter=$('netCountdownValue');if(counter)counter.textContent=String(Math.max(1,Math.ceil((countdownRemaining-(performance.now()-countdownAt))/1000)));
     if(!lastSnapshot)return;
     const lag=performance.now()-packetAt;
     if(lag<2000&&state.running){state.time+=dt;state.surviveTime+=dt;}
-    const blend=1-Math.exp(-24*dt);
-    for(const [list,key] of [[Coop.all(),'p'],[state.zombies,'z'],[Arsenal.drones,'d']])for(const p of list){const t=targets.get(key+p.id);if(t){if(Math.hypot(t.x-p.x,t.y-p.y)>200){p.x=t.x;p.y=t.y;}else{p.x+=(t.x-p.x)*blend;p.y+=(t.y-p.y)*blend;}}}
+    NetPrediction.update(dt,!menu&&!document.hidden&&state.running,lag<350&&state.running);
+    const blend=1-Math.exp(-32*dt);
+    for(const [list,key] of [[Coop.all(),'p'],[state.zombies,'z'],[Arsenal.drones,'d']])for(const p of list){
+      if(key==='p'&&p.id===id)continue;
+      const t=targets.get(key+p.id);if(!t)continue;
+      // Short, bounded extrapolation keeps remote movement fluid between packets.
+      const ahead=Math.min(.065,Math.max(0,(performance.now()-t.at)/1000)),speed=Math.hypot(t.vx,t.vy);
+      const allowed=lag<250&&speed<650&&p.hp!==0&&p.connected!==false;
+      const x=t.x+(allowed?(t.futureX-t.x)*ahead/.065:0),y=t.y+(allowed?(t.futureY-t.y)*ahead/.065:0);
+      if(Math.hypot(x-p.x,y-p.y)>200){p.x=t.x;p.y=t.y;}
+      else{p.x+=(x-p.x)*blend;p.y+=(y-p.y)*blend;}
+    }
     // Advance visual ordnance between authoritative packets, never collision damage.
     if(lag<120){
       for(const p of [...state.pellets,...state.rockets,...state.flameParticles]){
@@ -143,11 +179,12 @@ const Net=(()=>{
   }
   function leave(){state.keys.clear();mouseDown=false;send({type:'leave'});}
   function exit(){
-    const ws=socket;socket=null;ws?.close();clearInterval(inputTimer);clearTimeout(connectTimer);connected=false;room=null;lastSnapshot=null;menu=false;endAt=0;status='';screen='';
+    const ws=socket;socket=null;ws?.close();clearInterval(inputTimer);clearTimeout(connectTimer);clearTimeout(flushTimer);flushTimer=null;NetPrediction.reset();connected=false;room=null;lastSnapshot=null;menu=false;endAt=0;status='';screen='';
     resetVisuals();Coop.setClient(false);if(originalPlayer)player=originalPlayer;state.devMode=originalDev;state.paused=false;$('netStatus')?.classList.add('hidden');goToMainMenu();
   }
   function localize(){FrameStats.localize(lang);if(document.documentElement)document.documentElement.lang=zh()?'zh-CN':'en';for(const [el,key] of [['lKills','kills'],['lScore','score'],['lHp','hp'],['lAmmo','ammo'],['lWeapon','weapon'],['lReserve','reserve'],['lGrenades','grenades'],['lTime','time'],['lWave','wave'],['lBest','best']])$(el).textContent=T[lang][key];$('pauseBtn').textContent=tr('菜单 Esc','Menu Esc');if(menu)renderMenu();else if(screen==='connect')renderConnect();else if(screen==='lobby'){screen='';renderLobby();}else if(screen==='room')renderRoom();updateHUD();}
-  addEventListener('blur',()=>{if(Coop.client){state.keys.clear();mouseDown=false;actions=[];transmit();}});
-  document.addEventListener('visibilitychange',()=>{if(Coop.client&&document.hidden){state.keys.clear();mouseDown=false;actions=[];transmit();}});
-  return {open,update,action:a=>{if(!menu&&player.hp>0&&actions.length<5)actions.push(a);},leave,exit,toggleMenu,localize,get connected(){return connected;},get room(){return room;},get id(){return id;},get ping(){return ping;}};
+  const release=()=>{state.keys.clear();mouseDown=false;actions=[];flushInput();};
+  addEventListener('blur',()=>{if(Coop.client)release();});
+  document.addEventListener('visibilitychange',()=>{if(Coop.client&&document.hidden)release();});
+  return {open,update,action,flushInput,leave,exit,toggleMenu,localize,get connected(){return connected;},get room(){return room;},get id(){return id;},get ping(){return ping;}};
 })();

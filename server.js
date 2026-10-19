@@ -24,18 +24,32 @@ function createHost(options={}){
   function send(c,data){if(c.ws.readyState===WebSocket.OPEN)c.ws.send(JSON.stringify(data));}
   function error(c,code){send(c,{type:'error',code});}
   const publicRoom=r=>({id:r.id,name:r.name,capacity:r.capacity,count:r.members.size,locked:!!r.password,status:r.status,hostId:r.hostId});
-  function roomInfo(r){return {...publicRoom(r),members:[...r.members.values()].map(c=>({id:c.id,name:c.name,ready:c.ready})),result:r.result||null};}
+  function roomInfo(r){return {...publicRoom(r),members:[...r.members.values()].map(c=>({id:c.id,name:c.name,ready:c.ready})),result:r.result||null,startsInMs:r.countdownEnd?Math.max(0,r.countdownEnd-Date.now()):0};}
   function announceRoom(r){for(const c of r.members.values())send(c,{type:'room',room:roomInfo(r)});}
   function lobby(c){send(c,{type:'lobby',name:hostName,rooms:[...rooms.values()].map(publicRoom)});}
   function announceLobby(){for(const c of clients.values())if(c.hello&&!c.room)lobby(c);}
+  function cancelCountdown(r){clearInterval(r.countdownTimer);r.countdownTimer=null;r.countdownEnd=0;}
+  function checkCountdown(r){
+    if(r.status!=='waiting'||![...r.members.values()].every(c=>c.ready)||!r.members.size){cancelCountdown(r);return;}
+    if(r.countdownTimer)return;
+    r.countdownEnd=Date.now()+5000;let displayed=5;
+    r.countdownTimer=setInterval(()=>{
+      if(closed||!rooms.has(r.id)||r.status!=='waiting'||![...r.members.values()].every(c=>c.ready)){cancelCountdown(r);return;}
+      const left=Math.ceil((r.countdownEnd-Date.now())/1000);
+      if(left<=0){start(r);return;}
+      if(left!==displayed){displayed=left;announceRoom(r);}
+    },100);
+    r.countdownTimer.unref();
+  }
   function leave(c,notify=true){
     const r=rooms.get(c.room);c.room=null;c.ready=false;
-    if(r){r.members.delete(c.id);r.worker?.postMessage({type:'disconnect',id:c.id});
+    if(r){cancelCountdown(r);r.members.delete(c.id);r.worker?.postMessage({type:'disconnect',id:c.id});
       if(!r.members.size){const w=r.worker;r.worker=null;w?.terminate();rooms.delete(r.id);}
-      else{if(r.hostId===c.id)r.hostId=r.members.keys().next().value;announceRoom(r);}}
+      else{if(r.hostId===c.id)r.hostId=r.members.keys().next().value;checkCountdown(r);announceRoom(r);}}
     if(notify){send(c,{type:'left'});lobby(c);}announceLobby();
   }
   function start(r){
+    if(r.status!=='waiting'||!r.members.size)return;cancelCountdown(r);
     r.status='starting';r.result=null;announceRoom(r);announceLobby();
     const worker=r.worker=new Worker(path.join(root,'server/room-worker.cjs'),{workerData:{members:[...r.members.values()].map(c=>({id:c.id,name:c.name})),seed:randomBytes(4).readUInt32LE()}});
     let failed=false;
@@ -44,7 +58,7 @@ function createHost(options={}){
     worker.on('message',m=>{
       if(r.worker!==worker||!rooms.has(r.id))return;
       if(m.type==='started'){r.status='playing';for(const c of r.members.values()){c.sequence=-1;send(c,{type:'start',snapshot:m.snapshot});}announceRoom(r);announceLobby();}
-      else if(m.type==='snapshot'){const payload=JSON.stringify({type:'snapshot',snapshot:m.snapshot});for(const c of r.members.values()){
+      else if(m.type==='snapshot'){const payload=m.payload;for(const c of r.members.values()){
         if(c.ws.bufferedAmount>512*1024){c.ws.close(1013,'Connection too slow');continue;}
         if(c.ws.readyState===WebSocket.OPEN)c.ws.send(payload);
       }}
@@ -78,14 +92,13 @@ function createHost(options={}){
         if(r.members.size>=r.capacity)return error(c,'room_full');
         if(r.password&&!timingSafeEqual(r.password,scryptSync(clean(m.password,32),r.salt,32)))return error(c,'password');
       }
-      c.room=r.id;c.ready=false;r.members.set(c.id,c);announceRoom(r);announceLobby();return;
+      cancelCountdown(r);c.room=r.id;c.ready=false;r.members.set(c.id,c);announceRoom(r);announceLobby();return;
     }
     const r=rooms.get(c.room);if(!r)return error(c,'not_in_room');
-    if(m.type==='ready'){if(r.status!=='waiting')return; c.ready=!c.ready;return announceRoom(r);}
+    if(m.type==='ready'){if(r.status!=='waiting')return; c.ready=!c.ready;checkCountdown(r);return announceRoom(r);}
     if(m.type==='start'){
       if(c.id!==r.hostId)return error(c,'host_only');
       if(r.status!=='waiting')return error(c,'in_progress');
-      if([...r.members.values()].some(p=>!p.ready))return error(c,'not_ready');
       return start(r);
     }
     if(m.type==='rematch'){
@@ -96,7 +109,7 @@ function createHost(options={}){
       if(r.status!=='playing'||!r.worker)return;
       if(!Number.isSafeInteger(m.seq)||m.seq<=c.sequence||!Number.isFinite(m.aimX)||!Number.isFinite(m.aimY)||!Array.isArray(m.keys)||m.keys.length>9)return;
       c.sequence=m.seq;
-      const input={keys:[...new Set(m.keys.filter(k=>KEYS.has(k)))],aimX:Math.max(0,Math.min(3600,m.aimX)),aimY:Math.max(0,Math.min(2400,m.aimY)),fire:m.fire===true,actions:Array.isArray(m.actions)?[...new Set(m.actions.filter(a=>['reload','grenade','molotov','shoot','dash'].includes(a)))].slice(0,5):[]};
+      const input={seq:m.seq,keys:[...new Set(m.keys.filter(k=>KEYS.has(k)))],aimX:Math.max(0,Math.min(3600,m.aimX)),aimY:Math.max(0,Math.min(2400,m.aimY)),fire:m.fire===true,actions:Array.isArray(m.actions)?[...new Set(m.actions.filter(a=>['reload','grenade','molotov','shoot','dash'].includes(a)))].slice(0,5):[]};
       r.worker.postMessage({type:'input',id:c.id,input});return;
     }
     error(c,'unknown');
@@ -115,7 +128,7 @@ function createHost(options={}){
     const timer=setTimeout(()=>{if(!c.hello)ws.close(1008,'Hello timeout');},10000);timer.unref();ws.on('close',()=>clearTimeout(timer));
   });
   const heartbeat=setInterval(()=>{for(const c of clients.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.ws.ping();}},15000);heartbeat.unref();
-  async function close(){if(closed)return;closed=true;clearInterval(heartbeat);for(const r of rooms.values()){const w=r.worker;r.worker=null;await w?.terminate();}rooms.clear();for(const c of clients.values())c.ws.terminate();await new Promise(resolve=>wss.close(resolve));await new Promise(resolve=>server.close(resolve));}
+  async function close(){if(closed)return;closed=true;clearInterval(heartbeat);for(const r of rooms.values()){cancelCountdown(r);const w=r.worker;r.worker=null;await w?.terminate();}rooms.clear();for(const c of clients.values())c.ws.terminate();await new Promise(resolve=>wss.close(resolve));await new Promise(resolve=>server.close(resolve));}
   return {server,rooms,clients,close,listen(port=Number(process.env.PORT)||8080,host=process.env.HOST||'0.0.0.0'){return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>{server.removeListener('error',reject);resolve(server.address());});});}};
 }
 if(require.main===module){

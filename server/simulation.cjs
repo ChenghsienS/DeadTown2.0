@@ -3,7 +3,7 @@
 // collision, AI, projectiles, fire, drops and bosses are the shared game code.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'..');
-const scripts=['version.js','coop.js','server/headless.js','town.js','weather.js','boss.js','arsenal.js','burning.js','game.js','server/world.js'];
+const scripts=['version.js','coop.js','movement.js','server/headless.js','town.js','weather.js','boss.js','arsenal.js','burning.js','game.js','server/world.js'];
 const source=new Map(scripts.map(file=>[file,fs.readFileSync(path.join(root,file),'utf8')]));
 class Simulation {
   constructor(members,seed){
@@ -21,6 +21,7 @@ class Simulation {
   disconnect(id){this.api.disconnect(id);}
   step(dt=1/30){this.api.step(dt);}
   snapshot(){return this.api.snapshot();}
+  frame(){return this.api.frame();}
   // Only local verification uses eval. No network message exposes this method.
   inspect(code){return vm.runInContext(code,this.context);}
 }

@@ -334,7 +334,7 @@ function controlGuide(){const zh=lang==='zh';return `<ul class="controlGuide">${
 function renderMainMenu(){
   state.overlayScreen='main';
   const t=T[lang],zh=lang==='zh';
-  showMenu('mainCard',`${menuHeader(zh?'幸存者终端':'SURVIVOR TERMINAL',true)}<div class="mainGrid"><section class="hero"><div class="eyebrow">${zh?'隔离区 / 无尽尸潮':'QUARANTINE ZONE / ENDLESS HORDE'}</div><h1 class="heroTitle">${pixelTitle()}</h1><div class="heroCopy"><p>${t.start1}</p></div><div class="playerStrip"><span class="label">${t.nameLabel}</span><strong>${escapeHtml(state.playerName)}</strong></div><button id="startBtn" class="primary startButton"><span>${t.startBtn}</span><span class="arrow" aria-hidden="true">→</span></button><button id="onlineBtn" class="startButton onlineButton"><span>${zh?'多人合作':'Online Co-op'}</span><span>↗</span></button><nav class="menuButtons" aria-label="${zh?'主菜单':'Main menu'}"><button id="renameBtn">${zh?'修改名字':'Change Name'}<span class="buttonIndex" aria-hidden="true">01</span></button><button id="openKeybindMenuBtn">${t.openKeybindMenu}<span class="buttonIndex" aria-hidden="true">02</span></button><button id="devUnlockBtn">${state.devMode?(zh?'开发者 · 已解锁':'Developer · unlocked'):t.devUnlock}<span class="buttonIndex" aria-hidden="true">03</span></button><button id="menuLangBtn">${zh?'中文 / EN':'EN / 中文'}<span class="buttonIndex" aria-hidden="true">04</span></button></nav>${AudioEngine.settingsHTML(lang)}</section><aside class="menuSide"><div class="recordStrip"><span class="label">${zh?'个人纪录':'PERSONAL RECORD'}<br>${t.best}</span><strong id="menuBest">${Math.floor(state.best)}</strong></div><div id="leaderboardPanel" data-leaderboard-panel="main">${leaderboardCardMarkup()}</div><div class="creatorCard"><img class="creditAvatar" src="assets/avatar.png" width="64" height="64" alt="CEDRRRIIICCC"><div><span class="label">${t.createdBy}</span><strong class="creatorName">CEDRRRIIICCC</strong><p class="creatorNote">${zh?'本游戏在 ChatGPT 的协助下完成':'Created with the assistance of ChatGPT'}</p></div></div></aside></div>${menuFooter()}`);
+  showMenu('mainCard',`${menuHeader(zh?'幸存者终端':'SURVIVOR TERMINAL',true)}<div class="mainGrid"><section class="hero"><div class="eyebrow">${zh?'隔离区 / 无尽尸潮':'QUARANTINE ZONE / ENDLESS HORDE'}</div><h1 class="heroTitle">${pixelTitle()}</h1><div class="heroCopy"><p>${t.start1}</p></div><div class="playerStrip"><span class="label">${t.nameLabel}</span><strong>${escapeHtml(state.playerName)}</strong></div><button id="startBtn" class="primary startButton"><span>${t.startBtn}</span><span class="arrow" aria-hidden="true">→</span></button><button id="onlineBtn" class="primary startButton onlineButton"><span>${zh?'多人合作':'Online Co-op'}</span><span>↗</span></button><nav class="menuButtons" aria-label="${zh?'主菜单':'Main menu'}"><button id="renameBtn">${zh?'修改名字':'Change Name'}<span class="buttonIndex" aria-hidden="true">01</span></button><button id="openKeybindMenuBtn">${t.openKeybindMenu}<span class="buttonIndex" aria-hidden="true">02</span></button><button id="devUnlockBtn">${state.devMode?(zh?'开发者 · 已解锁':'Developer · unlocked'):t.devUnlock}<span class="buttonIndex" aria-hidden="true">03</span></button><button id="menuLangBtn">${zh?'中文 / EN':'EN / 中文'}<span class="buttonIndex" aria-hidden="true">04</span></button></nav>${AudioEngine.settingsHTML(lang)}</section><aside class="menuSide"><div class="recordStrip"><span class="label">${zh?'个人纪录':'PERSONAL RECORD'}<br>${t.best}</span><strong id="menuBest">${Math.floor(state.best)}</strong></div><div id="leaderboardPanel" data-leaderboard-panel="main">${leaderboardCardMarkup()}</div><div class="creatorCard"><img class="creditAvatar" src="assets/avatar.png" width="64" height="64" alt="CEDRRRIIICCC"><div><span class="label">${t.createdBy}</span><strong class="creatorName">CEDRRRIIICCC</strong><p class="creatorNote">${zh?'本游戏在 ChatGPT 的协助下完成':'Created with the assistance of ChatGPT'}</p></div></div></aside></div>${menuFooter()}`);
   AudioEngine.bindSettings();
   $('onlineBtn').onclick=()=>Net.open();
   $('renameBtn').onclick=promptPlayerName;$('startBtn').onclick=handleStartAttempt;
@@ -699,7 +699,7 @@ function shoot(){
   if(player.hp<=0)return;
   if(!state.running||state.gameOver||player.shootCooldown>0||player.reloadTimer>0||player.mag<=0)return;
   const kind=player.weapon,spec=WEAPONS[kind],aim=PixelArt.aimPose(player,camera());
-  const origin=safeMuzzle(aim.muzzleX,aim.muzzleY);PixelArt.shot(aim.angle,kind);
+  const origin=safeMuzzle(aim.muzzleX,aim.muzzleY);player.shotSerial=(player.shotSerial||0)+1;PixelArt.shot(aim.angle,kind);
   if(kind!=='arc')Lighting.flash(aim.angle,kind,origin);
   player.mag--;player.shootCooldown=spec.cooldown;
   state.cameraShake=Math.max(state.cameraShake,kind==='shotgun'?3.5:kind==='gatling'?1.6:kind==='rocket'?2:0);
@@ -754,7 +754,7 @@ addEventListener('mousedown',e=>{
   if(Weather.armed&&state.devMode){const cam=camera();Weather.arm(false);devStrike(cam.x+e.clientX,cam.y+e.clientY);mouseDown=false;updateDevPanel();return;}
   mouseDown=true;if(Coop.client)Net.action('shoot');
 });
-addEventListener('mouseup',()=>mouseDown=false);
+addEventListener('mouseup',()=>{mouseDown=false;if(Coop.client)Net.flushInput();});
 addEventListener('keydown',e=>{if(state.loading||ArtStudio.isOpen||menuDialog) return;
   if(e.target&&['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName))return;
   if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();
@@ -765,12 +765,12 @@ addEventListener('keydown',e=>{if(state.loading||ArtStudio.isOpen||menuDialog) r
   if(state.paused) return;
   state.keys.add(k);
   if(e.key==='Shift') state.keys.add('shift');
-  if(Coop.client){if(!e.repeat){if(k==='shift')Net.action('dash');if(k==='r')Net.action('reload');if(k===state.keybinds.grenade.toLowerCase())Net.action('grenade');if(k===state.keybinds.molotov.toLowerCase())Net.action('molotov');}return;}
+  if(Coop.client){if(!e.repeat){if(k==='shift')Net.action('dash');if(k==='r')Net.action('reload');if(k===state.keybinds.grenade.toLowerCase())Net.action('grenade');if(k===state.keybinds.molotov.toLowerCase())Net.action('molotov');Net.flushInput();}return;}
   if(k==='r') startReload();
   if(k===state.keybinds.grenade.toLowerCase()) throwThrowable('grenade');
   if(k===state.keybinds.molotov.toLowerCase()) throwThrowable('molotov');
 });
-addEventListener('keyup',e=>{state.keys.delete(e.key.toLowerCase());if(e.key==='Shift')state.keys.delete('shift');});
+addEventListener('keyup',e=>{state.keys.delete(e.key.toLowerCase());if(e.key==='Shift')state.keys.delete('shift');if(Coop.client)Net.flushInput();});
 
 // ── Enemy behavior ──
 function updateCharger(z,dt){
@@ -859,39 +859,17 @@ function updateSurvivor(dt){
     const actions=player.input?.actions||[];if(player.input)player.input.actions=[];
     for(const action of actions){if(action==='shoot')pressedShot=true;else if(action==='dash')pressedDash=true;else if(action==='reload')startReload();else if(action==='grenade'||action==='molotov')throwThrowable(action);}
   }
-  player.shootCooldown=Math.max(0,player.shootCooldown-dt);player.reloadTimer=Math.max(0,player.reloadTimer-dt);player.dashCooldown=Math.max(0,player.dashCooldown-dt);player.dashTime=Math.max(0,player.dashTime-dt);player.rocketJumpTime=Math.max(0,player.rocketJumpTime-dt);player.knockbackTime=Math.max(0,player.knockbackTime-dt);player.hurtTimer=Math.max(0,player.hurtTimer-dt);
+  player.shootCooldown=Math.max(0,player.shootCooldown-dt);player.reloadTimer=Math.max(0,player.reloadTimer-dt);player.hurtTimer=Math.max(0,player.hurtTimer-dt);
   if(player.wasReloading&&player.reloadTimer===0){
     player.wasReloading=false;
     if(player.weapon==='shotgun')player.mag=player.magSize;
     else {const key=reserveKey(),load=Math.min(player.magSize-player.mag,player[key]||0);player.mag+=load;player[key]-=load;}
   }
   if(player.mag===0&&player.reloadTimer===0)startReload();
-  let mx=0,my=0;
-  if(state.keys.has('w')||state.keys.has('arrowup'))my-=1;
-  if(state.keys.has('s')||state.keys.has('arrowdown'))my+=1;
-  if(state.keys.has('a')||state.keys.has('arrowleft'))mx-=1;
-  if(state.keys.has('d')||state.keys.has('arrowright'))mx+=1;
-  const len=Math.hypot(mx,my)||1; mx/=len; my/=len;
-  if((pressedDash||state.keys.has('shift'))&&player.dashCooldown<=0&&(mx||my)){player.dashCooldown=1.3;player.dashTime=0.18;const dashSpeed=460;player.dashVX=mx*dashSpeed;player.dashVY=my*dashSpeed;player.dashFacing=Math.atan2(my,mx);player.dashSpinDir=mx<0?-1:mx>0?1:(state.mouse.x<SW*0.5?-1:1);playDash();}
-  const camAim=camera();
-  const aimWorldX=Coop.aim(player,camAim).x;
-  if(aimWorldX<player.x-2) player.faceDir=-1;
-  else if(aimWorldX>player.x+2) player.faceDir=1;
-  if(player.rocketJumpTime>0){
-    moveWithWallCollision(player,player.rocketJumpVX*dt,player.rocketJumpVY*dt);
-    const rocketJumpDamping=Math.pow(ROCKET_JUMP_DAMPING_PER_SECOND,dt);
-    player.rocketJumpVX*=rocketJumpDamping;
-    player.rocketJumpVY*=rocketJumpDamping;
-  }else if(player.knockbackTime>0){
-    moveWithWallCollision(player,player.knockbackVX*dt,player.knockbackVY*dt);
-    const knockbackDamping=Math.pow(0.08,dt);
-    player.knockbackVX*=knockbackDamping;
-    player.knockbackVY*=knockbackDamping;
-  }else if(player.dashTime>0){
-    moveWithWallCollision(player,player.dashVX*dt,player.dashVY*dt);
-    if(Math.random()<0.95){for(let d=0;d<2;d++){state.particles.push({x:player.x-rand(-6,6),y:player.y+10-rand(0,4),vx:rand(-40,40)-player.dashVX*0.05,vy:rand(-18,6),life:rand(0.18,0.38),maxLife:0.38,size:rand(4,7),color:Math.random()>0.5?'rgba(168,142,98,0.34)':'rgba(110,102,88,0.30)',drag:0.92,floaty:true});}}
-  }else{
-    moveWithWallCollision(player,mx*player.speed*(player.speedMul||1)*dt,my*player.speed*(player.speedMul||1)*dt);
+  const dashed=SurvivorMotion.step(player,dt,{keys:state.keys,dash:pressedDash,aimX:Coop.aim(player,camera()).x});
+  if(dashed)playDash();
+  if(player.dashTime>0&&player.rocketJumpTime<=0&&player.knockbackTime<=0&&Math.random()<.95){
+    for(let d=0;d<2;d++)state.particles.push({x:player.x-rand(-6,6),y:player.y+10-rand(0,4),vx:rand(-40,40)-player.dashVX*.05,vy:rand(-18,6),life:rand(.18,.38),maxLife:.38,size:rand(4,7),color:Math.random()>.5?'rgba(168,142,98,0.34)':'rgba(110,102,88,0.30)',drag:.92,floaty:true});
   }
   if((mouseDown||pressedShot)&&!Weather.armed){shoot();if(player.mag===0&&player.reloadTimer<=0)startReload();}
 }
@@ -1060,6 +1038,7 @@ function update(dt){
   for(let i=0;i<state.zombies.length;i++){
     const z=state.zombies[i];
     if(BossAttack.fixed(z))continue;
+    if(Math.hypot(player.x-z.x,player.y-z.y)>=player.radius+z.radius)continue;
     softSeparate(player,z,z.type==='boss'?0.22:0.18);
     player.x=clamp(player.x,player.radius+2,WORLD.w-(player.radius+2));
     player.y=clamp(player.y,player.radius+2,WORLD.h-(player.radius+2));
