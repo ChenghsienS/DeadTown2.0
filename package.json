@@ -1,0 +1,18 @@
+{
+  "name": "deadtown",
+  "version": "1.1.5",
+  "private": true,
+  "description": "Dead Town pixel survival: offline solo and self-hosted authoritative co-op",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check version.js && node --check game.js && node --check lighting.js && node --check weather.js && node --check audio.js && node --check assets/audio-bank.js && node --check server.js && node --check boss.js && node --check pixel-art.js && node --check arsenal.js && node --check town.js && node --check town-art.js && node --check town-lights.js && node --check art-catalog.js && node --check art-workspace.js && node --check art-studio.js && node --check frame-stats.js && node --check burning.js && node --check dev-horde.js && node --check coop.js && node --check network.js && node --check server/simulation.cjs && node --check server/headless.js && node --check server/world.js && node --check server/room-worker.cjs",
+    "release": "python3 tools/package_release.py",
+    "test": "node tests/multiplayer.cjs"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
