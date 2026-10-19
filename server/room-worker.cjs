@@ -11,5 +11,5 @@ setInterval(()=>{
   let work=0;
   while(accumulator>=1/30&&work++<6){sim.step();accumulator-=1/30;ticks++;}
   if(ticks>=2){ticks%=2;const snapshot=sim.frame();parentPort.postMessage({type:'snapshot',payload:snapshot.payload});
-    if(snapshot.gameOver&&!ended){ended=true;parentPort.postMessage({type:'ended',score:snapshot.score,kills:snapshot.kills,time:snapshot.time});}}
+    if(snapshot.gameOver&&!ended){ended=true;parentPort.postMessage({type:'ended',score:snapshot.score,kills:snapshot.kills,time:snapshot.time,ranking:snapshot.ranking});}}
 },10);

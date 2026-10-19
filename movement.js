@@ -1,7 +1,7 @@
 // The same movement/collision rules serve solo, server authority and client replay.
 // Replay changes only the supplied actor: no damage, pickups, audio or particles.
 const SurvivorMotion=(()=>{
-  const fields=['x','y','radius','speed','speedMul','faceDir','dashCooldown','dashTime','dashVX','dashVY','dashFacing','dashSpinDir','rocketJumpTime','rocketJumpVX','rocketJumpVY','knockbackTime','knockbackVX','knockbackVY'];
+  const fields=['x','y','radius','speed','speedMul','downed','faceDir','dashCooldown','dashTime','dashVX','dashVY','dashFacing','dashSpinDir','rocketJumpTime','rocketJumpVX','rocketJumpVY','knockbackTime','knockbackVX','knockbackVY'];
   function copy(p){const result={};for(const k of fields)result[k]=p[k];return result;}
   function step(p,dt,input){
     for(const k of ['dashCooldown','dashTime','rocketJumpTime','knockbackTime'])p[k]=Math.max(0,(p[k]||0)-dt);
@@ -11,6 +11,7 @@ const SurvivorMotion=(()=>{
     if(keys.has('a')||keys.has('arrowleft'))mx--;
     if(keys.has('d')||keys.has('arrowright'))mx++;
     const len=Math.hypot(mx,my)||1;mx/=len;my/=len;
+    if(p.downed){p.dashTime=p.rocketJumpTime=p.knockbackTime=0;moveWithWallCollision(p,mx*Coop.rescue.crawlSpeed*dt,my*Coop.rescue.crawlSpeed*dt);if(mx)p.faceDir=mx<0?-1:1;return false;}
     let dashed=false;
     if((input.dash||keys.has('shift'))&&p.dashCooldown<=0&&(mx||my)){
       p.dashCooldown=1.3;p.dashTime=.18;p.dashVX=mx*460;p.dashVY=my*460;p.dashFacing=Math.atan2(my,mx);

@@ -32,7 +32,7 @@ const Arsenal=(()=>{
     arcs.push({a:{...a},b:{...b},frames,branches,index,entity,sourceEntity,age:0,life:0.24,seed});
     if(arcs.length>80)arcs.shift();
   }
-  function electric(origin,angle,mult=1){
+  function electric(origin,angle,mult=1,owner=player.id||'player'){
     const candidates=state.zombies.filter(z=>{
       if(!alive(z))return false;const dx=z.x-origin.x,dy=z.y-origin.y,d=Math.hypot(dx,dy);
       return d<=ARC.range+z.radius&&(d<20||(dx*Math.cos(angle)+dy*Math.sin(angle))/d>=Math.cos(ARC.halfAngle))&&clear(origin,hitPoint(z));
@@ -43,7 +43,7 @@ const Arsenal=(()=>{
       visited.add(target);addArc(from,point,i,target,fromEntity);target.electricUntil=state.time+0.24;
       target.hp-=damage;PixelArt.hit(target);addDamageText(target.x,target.y-target.radius-10,damage,'#a6edff');
       hits.push(target.id);previous={x:target.x,y:target.y};from=point;fromEntity=target;
-      if(target.hp<=0)handleZombieDeath(state.zombies.indexOf(target));
+      if(target.hp<=0)handleZombieDeath(state.zombies.indexOf(target),true,'normal',owner);
       if(!state.running||player.hp<=0)break;
       target=state.zombies.filter(z=>alive(z)&&!visited.has(z)&&dist(z.x,z.y,previous.x,previous.y)<=ARC.chainRange&&clear(from,hitPoint(z)))
         .sort((a,b)=>dist(a.x,a.y,previous.x,previous.y)-dist(b.x,b.y,previous.x,previous.y))[0];
@@ -52,9 +52,9 @@ const Arsenal=(()=>{
     AudioEngine.play('arc_shot',{x:origin.x,y:origin.y,volume:0.32,group:'electric',interval:0.045});
     return hits;
   }
-  function fire(kind,origin,angle,target,mult=player.damageMul||1,owner='player'){
+  function fire(kind,origin,angle,target,mult=player.damageMul||1,owner=player.id||'player'){
     const shotX=origin.x,shotY=origin.y,drone=owner==='drone';
-    if(kind==='arc')return electric(origin,angle,mult);
+    if(kind==='arc')return electric(origin,angle,mult,owner);
     if(drone){
       flashes.push({x:shotX,y:shotY,age:0,kind});if(flashes.length>12)flashes.shift();
       if(kind==='flamethrower')AudioEngine.play('flame_ignite',{x:shotX,y:shotY,volume:0.13,group:'drone_flame',interval:0.3});
@@ -151,7 +151,7 @@ const Arsenal=(()=>{
       if(distance>MICRO_MISSILE.blastRadius||!clear(m,p))continue;
       const damage=MICRO_MISSILE.damage*(1-0.6*distance/MICRO_MISSILE.blastRadius)*m.damageMul;
       z.hp-=damage;PixelArt.hit(z);addDamageText(z.x,z.y-z.radius-10,damage,'#ffbd83');
-      if(z.hp<=0)handleZombieDeath(state.zombies.indexOf(z));
+      if(z.hp<=0)handleZombieDeath(state.zombies.indexOf(z),true,'normal',m.ownerId);
       if(!state.running||state.gameOver)break;
     }
   }

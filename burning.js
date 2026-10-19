@@ -2,25 +2,25 @@
 const Burning=(()=>{
   const duration=3,tick=.25,zombieDPS=12,playerDPS=4,spreadRadius=96;
   function clear(target){delete target.burn;}
-  function ignite(target,mult=1,creditPlayer=true){
+  function ignite(target,mult=1,creditPlayer=true,owner=player.id||'player'){
     if(target.hp<=0)return;
     const b=target.burn;
-    if(b){b.remaining=duration;b.mult=Math.max(b.mult,mult);b.creditPlayer=b.creditPlayer||creditPlayer;}
-    else target.burn={remaining:duration,elapsed:0,mult,creditPlayer};
+    if(b){b.remaining=duration;b.mult=Math.max(b.mult,mult);b.creditPlayer=b.creditPlayer||creditPlayer;if(creditPlayer)b.owner=owner;}
+    else target.burn={remaining:duration,elapsed:0,mult,creditPlayer,owner};
   }
-  function hitZombie(z,amount,mult=1,creditPlayer=true,contact=true){
+  function hitZombie(z,amount,mult=1,creditPlayer=true,contact=true,owner=player.id||'player'){
     if(z.hp<=0||!state.zombies.includes(z))return;
-    if(contact)ignite(z,mult,creditPlayer);
+    if(contact)ignite(z,mult,creditPlayer,owner);
     z.hp-=amount;PixelArt.hit(z);playHit(z.x,z.y,'fire');
     addDamageText(z.x,z.y-z.radius-10,amount,'#efad64');
-    if(z.hp<=0)handleZombieDeath(state.zombies.indexOf(z),creditPlayer,'fire');
+    if(z.hp<=0)handleZombieDeath(state.zombies.indexOf(z),creditPlayer,'fire',owner);
   }
-  function igniteNearby(x,y,mult=1,creditPlayer=true){
+  function igniteNearby(x,y,mult=1,creditPlayer=true,owner=player.id||'player'){
     // One instant contact, never a persistent ground hazard. The dying Bloater
     // has already been removed and its original blast has finished resolving.
     for(const target of [...Coop.all(),...state.zombies]){
       if(target.hp<=0||(!Coop.isPlayer(target)&&BossAttack.airborne(target)))continue;
-      if(dist(x,y,target.x,target.y)<spreadRadius+target.radius&&Town.lineClear(x,y,target.x,target.y))ignite(target,mult,creditPlayer);
+      if(dist(x,y,target.x,target.y)<spreadRadius+target.radius&&Town.lineClear(x,y,target.x,target.y))ignite(target,mult,creditPlayer,owner);
     }
     state.explosions.push({x,y,radius:0,maxRadius:spreadRadius,life:.28,maxLife:.28,ring:0,ignitionBurst:true});
     for(let i=0;i<20;i++){
@@ -41,7 +41,7 @@ const Burning=(()=>{
       while(b.elapsed+1e-9>=tick&&target.hp>0&&!state.gameOver){
         b.elapsed=Math.max(0,b.elapsed-tick);
         if(Coop.isPlayer(target))Coop.withPlayer(target,()=>damagePlayer(playerDPS*tick,target.x,target.y,{ignoreInvincibility:true,fire:true}));
-        else hitZombie(target,zombieDPS*b.mult*tick,b.mult,b.creditPlayer,false);
+        else hitZombie(target,zombieDPS*b.mult*tick,b.mult,b.creditPlayer,false,b.owner);
       }
       if(b.remaining<1e-9||target.hp<=0)clear(target);
       if(state.gameOver)return;
@@ -54,7 +54,7 @@ const Burning=(()=>{
       if(!o.burn||o.hp<=0)continue;
       const x=o.x-cam.x,y=o.y-cam.y-(Coop.isPlayer(o)?Coop.withPlayer(o,()=>getPlayerJumpVisual().lift):o.lift||0);
       if(x<-60||y<-80||x>SW+60||y>SH+80)continue;
-      const fade=Math.min(1,o.burn.remaining/.45),seed=(o.id||0)*1.7;
+      const fade=Math.min(1,o.burn.remaining/.45),seed=String(o.id||0).split('').reduce((n,c)=>n+c.charCodeAt(0),0)*1.7;
       for(let i=0;i<6;i++){
         const phase=(state.time*(2.1+i*.13)+i*.19+seed)%1;
         const xx=Math.round((x+(i-2.5)*5+Math.sin(state.time*8+i)*2)/2)*2;

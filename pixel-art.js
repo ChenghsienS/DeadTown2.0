@@ -37,9 +37,9 @@ const PixelArt = (() => {
   }
   function blit(s,x,y,scale=2,alpha=1){ctx.save();ctx.imageSmoothingEnabled=false;ctx.globalAlpha=alpha;ctx.drawImage(s,Math.round(x),Math.round(y),s.width*scale,s.height*scale);ctx.restore();}
   function direction(a){const c=Math.cos(a),s=Math.sin(a);return Math.abs(s)>Math.abs(c)?(s<0?2:0):(c<0?3:1);}
-  function sprite(kind,pose='idle',frame=0,dir=0,variant=0,aiming=false){
-    return cached(['actor',kind,pose,frame,dir,variant,aiming].join('/'),kind==='boss'?52:36,kind==='boss'?64:42,c=>{
-      const p=palettes[kind]||palettes.walker,boss=kind==='boss',playerSprite=kind==='player';
+  function sprite(kind,pose='idle',frame=0,dir=0,variant=0,aiming=false,appearance=null){
+    return cached(['actor',kind,pose,frame,dir,variant,aiming,kind==='player'?PlayerSkins.key(appearance):''].join('/'),kind==='boss'?52:36,kind==='boss'?64:42,c=>{
+      const p=kind==='player'?PlayerSkins.palette(appearance):palettes[kind]||palettes.walker,boss=kind==='boss',playerSprite=kind==='player',skin=PlayerSkins.normalize(appearance).skinId;
       c.translate(boss?26:18,boss?42:26);if(dir===3||(playerSprite&&aiming&&(variant===3||variant===5)))c.scale(-1,1);
       const gait=[0,1,2,1,0,-1,-2,-1][frame%8],walk=pose==='walk',idle=pose==='idle';
       const swing=walk?Math.round(gait*(kind==='runner'?1.7:kind==='bloater'?0.6:1)):0,bob=walk?(frame%4===1?-1:0):(idle&&frame>3?-1:0);
@@ -48,7 +48,7 @@ const PixelArt = (() => {
       if(pose==='hurt'){c.translate(-1,1);c.rotate(-0.08);}
       if(pose==='roll'){
         c.rotate(frame*Math.PI/4);box(c,-6,-6,12,12,p.dark);rect(c,-4,-5,8,5,p.coat);rect(c,-3,-2,7,4,p.skin);
-        rect(c,2,-4,3,3,p.light);rect(c,-6,2,5,4,p.pants);rect(c,1,3,5,3,p.pants);rect(c,-2,-6,5,2,p.trim);return;
+        rect(c,2,-4,3,3,p.light);rect(c,-6,2,5,4,p.pants);rect(c,1,3,5,3,p.pants);rect(c,-2,-6,5,2,p.trim);if(playerSprite&&skin!=='ranger'){rect(c,-4,-7,8,2,p.accent);if(skin==='medic'){rect(c,-2,-5,4,1,'#ede8d2');rect(c,-1,-6,1,3,'#ede8d2');}}return;
       }
       c.translate(walk&&kind==='bloater'?Math.sign(gait):0,bob+crouch);
       if(walk&&kind==='runner')c.rotate(dir===2?-0.06:0.06);
@@ -98,6 +98,9 @@ const PixelArt = (() => {
         rect(c,-3,-4,6,6,'#354840');rect(c,-3,-4,5,1,'#a0a18b');rect(c,-3,-1,2,3,'#727d64');rect(c,0,-1,2,3,'#727d64');
         rect(c,-6,-6,2,2,'#b7a170');rect(c,-6,-8,1,3,'#303d42');
         if(dir===2){box(c,-4,-5,8,8,'#586554');rect(c,-3,-4,6,2,'#8b9475');rect(c,-3,0,6,1,'#2d423a');}
+        if(skin==='medic'){box(c,-6,-6,12,12,p.coat);rect(c,-1,-5,1,10,p.dark);rect(c,-5,1,3,3,p.trim);rect(c,2,1,3,3,p.trim);rect(c,-4,-4,3,1,p.accent);rect(c,-3,-5,1,3,p.accent);if(dir===2){box(c,-5,-6,10,10,p.dark);rect(c,-3,-3,6,2,p.accent);rect(c,-1,-5,2,6,p.accent);}}
+        if(skin==='scavenger'){box(c,-6,0,12,8,p.coat);rect(c,-1,2,2,6,p.dark);for(let i=0;i<8;i++)rect(c,-5+i,-5+i,2,2,p.accent);box(c,-8,-1,4,7,p.dark);rect(c,-8,0,4,1,p.trim);}
+        if(skin==='engineer'){box(c,-7,-7,4,5,p.dark);box(c,3,-7,4,5,p.dark);rect(c,-5,-6,10,2,p.accent);rect(c,-4,-4,2,8,p.pants);rect(c,2,-4,2,8,p.pants);rect(c,-5,1,10,2,p.trim);box(c,-5,4,3,3,p.dark);box(c,2,4,3,3,p.dark);}
       }else if(wide){
         box(c,-half+2,-3,width-4,8,p.skin);rect(c,-half+3,-2,width-7,2,p.light);rect(c,-2,1,4,4,p.shade);
         for(const [x,y] of [[-4,-2],[3,0],[5,3]]){rect(c,x,y,2,2,'#bac084');rect(c,x,y+1,1,1,'#6b684b');}
@@ -124,6 +127,9 @@ const PixelArt = (() => {
         if(variant===1||variant===3){rect(c,-3,headY+3,2,3,p.shade);rect(c,3,headY+4,2,2,p.light);}
         if(variant===2){rect(c,-3,headY+3,6,2,'#24343a');rect(c,-2,headY+3,2,1,'#a1b2af');}
       }
+      if(playerSprite&&skin==='medic'){rect(c,-5,headY-2,10,3,p.accent);rect(c,-3,headY-3,6,1,p.accent);rect(c,-1,headY-2,1,3,'#f3e6ca');rect(c,-2,headY-1,3,1,'#f3e6ca');if(dir!==2){rect(c,-3,headY+3,7,3,p.trim);rect(c,-3,headY+3,2,1,p.dark);}box(c,-6,headY+4,2,7,'#53423b');}
+      if(playerSprite&&skin==='scavenger'){box(c,-6,headY-2,12,11,p.dark);rect(c,-4,headY-1,8,2,p.coat);rect(c,-5,headY,2,8,p.coat);rect(c,4,headY,2,8,p.coat);if(dir!==2){rect(c,-3,headY+2,7,2,p.skin);rect(c,-3,headY+4,7,4,'#3b4548');rect(c,-4,headY+5,2,2,p.accent);rect(c,3,headY+5,2,2,p.accent);rect(c,0,headY+3,2,1,'#151c22');}else rect(c,-4,headY+2,8,6,p.coat);}
+      if(playerSprite&&skin==='engineer'){box(c,-5,headY-3,10,6,p.accent);rect(c,-6,headY,13,2,p.trim);rect(c,-1,headY-3,2,5,p.trim);if(dir!==2){box(c,-4,headY+2,9,4,'#283e4b');rect(c,-3,headY+2,6,1,'#8dafb4');rect(c,4,headY+5,2,3,p.dark);}else rect(c,-4,headY+3,8,4,p.dark);}
       if(charger){box(c,-8,-9,5,5,'#6e7770');rect(c,-8,-9,4,1,'#b0b5a1');box(c,4,-9,5,5,'#65706c');rect(c,-6,-17,12,3,pose==='charge'?'#c3a471':'#8d7961');}
       if(pouncer){rect(c,-6,-11,2,6,'#c5bbb0');rect(c,5,-11,2,6,'#9e9596');rect(c,-8,2-swing,4,1,'#c5bbb0');rect(c,6,2+swing,4,1,'#c5bbb0');}
       if(pose==='reload'&&!aiming){box(c,2,0+frame%3,4,3,p.skin);rect(c,5,1+frame%3,2,1,p.light);}
@@ -162,7 +168,7 @@ const PixelArt = (() => {
   }
   function initActor(o){if(o.artX===undefined){o.artX=o.x;o.artY=o.y;o.animPhase=0;o.artFacing=0;o.artMoving=false;}}
   function animate(o,dt){
-    initActor(o);const dx=o.x-o.artX,dy=o.y-o.artY,d=Math.hypot(dx,dy);
+    initActor(o);o.artDownAge=o.downed?(o.artDownAge||0)+dt:0;const dx=o.x-o.artX,dy=o.y-o.artY,d=Math.hypot(dx,dy);
     o.artMoving=d>0.12&&d<60;o.animPhase=(o.animPhase+(o.artMoving?d*(Coop.isPlayer(o)?Math.PI/50:o.type==='boss'?0.028:0.1):0))%(Math.PI*2);
     if(o.artMoving)o.artFacing=Math.atan2(dy,dx);
     o.artX=o.x;o.artY=o.y;o.artRecoil=Math.max(0,(o.artRecoil||0)-dt);o.artHit=Math.max(0,(o.artHit||0)-dt);
@@ -210,10 +216,14 @@ const PixelArt = (() => {
     return {...aim,x,y,trigger,support,near:solve(near,trigger,aim.flip),far:solve(far,support,-aim.flip),
       behind:aim.dy<-0.25,muzzleX:x+aim.dx*length,muzzleY:y+aim.dy*length};
   }
-  const playerLayer=surface(70,70);let rigShadows=new WeakMap(),playerShadow=null;
+  let playerLayers=new WeakMap(),rigShadows=new WeakMap(),playerShadow=null;
   function drawPlayerRig(o,cam,paint=true){
     playerShadow=rigShadows.get(o)||null;
+    if(o.downed){if(paint)drawDowned(o,cam);return;}
     if(o.hp<=0){if(paint)drawPlayerFall(cam,Coop.active?coopFalls.get(o.id):playerFall);return;}
+    // Each survivor keeps its own composed body/weapon buffer, including during
+    // lighting passes. Another player's appearance can never overwrite it.
+    let playerLayer=playerLayers.get(o);if(!playerLayer){playerLayer=surface(70,70);playerLayers.set(o,playerLayer);}
     const rig=aimRig(o,cam),x=Math.round(o.x-cam.x),groundY=Math.round(o.y-cam.y),lift=Coop.withPlayer(o,()=>getPlayerJumpVisual().lift);
     let pose=o.artMoving?'walk':'idle',frame=o.artMoving?Math.floor((o.animPhase||0)/Math.PI*4)%8:Math.floor(state.time*2)%8;
     if(o.dashTime>0){pose='roll';frame=Math.min(7,Math.floor((1-o.dashTime/0.18)*8));}
@@ -222,9 +232,9 @@ const PixelArt = (() => {
     const active=o.hp>0&&pose!=='roll',dir=[1,0,0,0,3,2,2,2][rig.sector];
     const cycling=state.time<(o.artShotUntil||0)?Math.floor(state.time*24)%3:0;
     const lit=o.weapon==='arc'&&(militaryPulse(state.time)||state.time<(o.artShotUntil||0));
-    const shadowKey=[o.x,o.y,cam.x,cam.y,lift,pose,frame,dir,rig.sector,rig.angle,rig.x,rig.y,rig.support.x,rig.support.y,o.weapon,o.reloadTimer>0,cycling,lit].join('/');
+    const shadowKey=[o.x,o.y,cam.x,cam.y,lift,pose,frame,dir,rig.sector,rig.angle,rig.x,rig.y,rig.support.x,rig.support.y,o.weapon,o.reloadTimer>0,cycling,lit,PlayerSkins.key(o)].join('/');
     if(!paint&&playerShadow?.key===shadowKey)return;
-    const body=sprite('player',pose,frame,dir,rig.sector,active),c=playerLayer.getContext('2d');
+    const body=sprite('player',pose,frame,dir,rig.sector,active,o),palette=PlayerSkins.palette(o),c=playerLayer.getContext('2d');
     c.clearRect(0,0,70,70);c.save();c.imageSmoothingEnabled=false;c.translate(35,40);
     const local=p=>({x:(p.x-o.x)/2,y:(p.y-o.y)/2});
     function line(a,b,width,color){
@@ -233,13 +243,13 @@ const PixelArt = (() => {
     }
     function arm(a){
       const s=local(a.shoulder),e=local(a.elbow),h=local(a.hand);
-      line(s,e,4,'#192126');line(e,h,4,'#192126');line(s,e,2,'#66766e');line(e,h,2,'#96a396');
+      line(s,e,4,'#192126');line(e,h,4,'#192126');line(s,e,2,palette.coat);line(e,h,2,palette.trim);
     }
     function gun(){
       const reload=o.reloadTimer>0;
       const g=weapon(o.weapon,rig.angle,cycling,reload,lit),p=local(rig);
       c.drawImage(g,Math.round(p.x)-21,Math.round(p.y)-21);
-      for(const hand of [rig.trigger,rig.support]){const h=local(hand);box(c,h.x-1,h.y-1,2,2,'#c7a486');rect(c,h.x-1,h.y-1,1,1,'#e0c5a1');}
+      for(const hand of [rig.trigger,rig.support]){const h=local(hand);box(c,h.x-1,h.y-1,2,2,palette.skin);rect(c,h.x-1,h.y-1,1,1,palette.light);}
     }
     if(active){arm(rig.far);if(rig.behind){arm(rig.near);gun();}}
     c.drawImage(body,-18,-26);
@@ -291,9 +301,11 @@ const PixelArt = (() => {
     return {x,y,r:Math.max(...points.map(p=>Math.hypot(p.x-x,p.y-y))),kind,entityId,points};
   }
   function playerCaster(cam=camera(),o=player){
+    if(o.downed){const body=crawlSprite(o);return outlineCaster(silhouette(body).map(p=>({x:o.x-64+p.x*2,y:o.y-48+p.y*2})),'player',o.id);}
     if(o.hp<=0){
       const d=Coop.active?coopFalls.get(o.id):playerFall;if(!d)return null;
-      const lift=d.lift*Math.max(0,1-d.age/.3),body=fallFrame('player',d.age,d.dir);
+      if(d.prone){const body=crawlSprite(d);return outlineCaster(silhouette(body).map(p=>({x:d.x-64+p.x*2,y:d.y-48+p.y*2})),'player',o.id);}
+      const lift=d.lift*Math.max(0,1-d.age/.3),body=fallFrame('player',d.age,d.dir,0,d);
       return outlineCaster(silhouette(body).map(p=>({x:cam.x+Math.round(d.x-cam.x-128)+p.x*2,
         y:cam.y+Math.round(d.y-cam.y-148-lift)+p.y*2})),'player','player');
     }
@@ -360,7 +372,7 @@ const PixelArt = (() => {
   }
   function updateDeaths(dt){
     if(!Number.isFinite(dt)||dt<=0)return;
-    for(const fall of (Coop.active?[...coopFalls.values()]:playerFall?[playerFall]:[])){fall.age+=dt;if(fall.age>=1.03&&!fall.impactPlayed){fall.impactPlayed=true;AudioEngine.play('roll',{volume:0.28,rate:0.65,gameplay:false});state.cameraShake=Math.max(state.cameraShake,3);}}
+    for(const fall of (Coop.active?[...coopFalls.values()]:playerFall?[playerFall]:[])){fall.age+=dt;if(fall.age>=1.03&&!fall.impactPlayed){fall.impactPlayed=true;if(!fall.prone){AudioEngine.play('roll',{volume:0.28,rate:0.65,gameplay:false});state.cameraShake=Math.max(state.cameraShake,3);}}}
 
     for(let i=corpses.length-1;i>=0;i--){
       const d=corpses[i];d.age+=dt;
@@ -460,12 +472,12 @@ const PixelArt = (() => {
       c.putImageData(pixels,0,0);
     });
   }
-  function fallFrame(kind,age,dir=0,variant=0){
+  function fallFrame(kind,age,dir=0,variant=0,appearance=null){
     if(kind==='boss')return bossFallFrame(age,dir,variant);
     const frame=Math.min(22,Math.floor(age*20));
-    return cached(`wholefall/${kind}/${dir}/${variant}/${frame}`,128,110,c=>{
+    return cached(`wholefall/${kind}/${dir}/${variant}/${frame}/${kind==='player'?PlayerSkins.key(appearance):''}`,128,110,c=>{
       const t=frame/20,kneel=clamp((t-0.12)/0.3,0,1),u=clamp((t-0.38)/0.65,0,1),fall=u*u*(3-2*u),sign=dir===3?-1:1;
-      const feet=35,origin=26,body=sprite(kind,'idle',0,dir,variant);
+      const feet=35,origin=26,body=sprite(kind,'idle',0,dir,variant,false,appearance);
       c.translate(64+(t<0.16?Math.sin(t*85):0),74+feet-origin);
       c.translate(0,kneel*3*(1-fall));c.rotate(sign*fall*Math.PI/2);
       c.scale(1-fall*0.48,1-fall*0.12-kneel*(1-fall)*0.12);
@@ -511,10 +523,26 @@ const PixelArt = (() => {
       }c.putImageData(pixels,0,0);
     });
   }
+  function crawlSprite(o){
+    const frame=o.artMoving?Math.floor((o.animPhase||0)*4/Math.PI)%8:0,dir=o.faceDir<0?3:1;
+    return cached(`crawl/${PlayerSkins.key(o)}/${dir}/${frame}`,64,48,c=>{
+      const p=PlayerSkins.palette(o),pull=[0,1,2,1,0,-1,-2,-1][frame];c.save();c.translate(32,24);if(dir===3)c.scale(-1,1);
+      c.save();c.rotate(Math.PI/2);c.drawImage(sprite('player','idle',0,1,0,false,o),-18,-26);c.restore();
+      // Forearms alternate their pull; boots trail the full-size prone torso.
+      box(c,6+pull,4,9,3,p.coat);box(c,12+pull,4,4,3,p.skin);box(c,6-pull,-7,8,3,p.dark);box(c,11-pull,-7,4,3,p.shade);
+      box(c,-11-pull,2,6,3,p.pants);rect(c,-12-pull,3,3,3,p.dark);c.restore();
+    });
+  }
+  function drawDowned(o,cam){
+    const x=Math.round(o.x-cam.x),y=Math.round(o.y-cam.y);pxRect(x-22,y+9,44,4,'#07100f',.38);
+    // A short knee-drop connects the upright pose to the prone crawl.
+    if((o.artDownAge||0)<.32){const t=(o.artDownAge||0)/.32;ctx.save();ctx.translate(x,y+8*t);ctx.rotate((o.faceDir<0?-1:1)*t*Math.PI/2);blit(sprite('player','hurt',0,o.faceDir<0?3:1,0,false,o),-36,-52);ctx.restore();}
+    else blit(crawlSprite(o),x-64,y-48);
+  }
   function playerDeath(){
     if(Coop.active?coopFalls.has(player.id):playerFall)return;
     const aim=aimPose(player,camera());
-    const fall={x:player.x,y:player.y,age:0,dir:aim.dx<0?3:1,weapon:player.weapon,angle:aim.angle,lift:getPlayerJumpVisual().lift,impactPlayed:false};
+    const fall={...PlayerSkins.normalize(player),x:player.x,y:player.y,age:0,dir:aim.dx<0?3:1,faceDir:player.faceDir,prone:(player.artDownAge||0)>.3,weapon:player.weapon,angle:aim.angle,lift:getPlayerJumpVisual().lift,impactPlayed:false};
     if(Coop.active)coopFalls.set(player.id,fall);else playerFall=fall;
     player.dashTime=0;player.rocketJumpTime=0;player.knockbackTime=0;player.artShotUntil=0;
   }
@@ -525,9 +553,10 @@ const PixelArt = (() => {
   }
   function drawPlayerFall(cam,d=playerFall){
     if(!d)return;
+    if(d.prone){pxRect(d.x-cam.x-21,d.y-cam.y+7,42,5,'#341e22',.65);blit(crawlSprite(d),d.x-cam.x-64,d.y-cam.y-48);return;}
     const x=d.x-cam.x,y=d.y-cam.y,lift=d.lift*Math.max(0,1-d.age/0.3),spread=clamp(d.age/1.6,0,1);
     pxRect(x-12,y+16,24+spread*14,4,'#341e22',0.65);
-    blit(fallFrame('player',d.age,d.dir),x-128,y-148-lift);
+    blit(fallFrame('player',d.age,d.dir,0,d),x-128,y-148-lift);
     const drop=clamp((d.age-0.18)/0.7,0,1),sign=d.dir===3?-1:1;
     const gun=weapon(d.weapon,d.angle+sign*drop*0.5,0,false);
     blit(gun,x-42-sign*drop*22,y-42+drop*20-Math.sin(drop*Math.PI)*12);
@@ -773,9 +802,9 @@ const PixelArt = (() => {
       updateDeaths(frame/12);drawCorpses({x:0,y:0});
     }finally{corpses.splice(0,corpses.length,...saved);casings.splice(0,casings.length,...savedCasings);playerFall=savedFall;}
   }
-  function reset(){rigShadows=new WeakMap();coopFalls.clear();playerFall=null;playerShadow=null;corpses.length=0;casings.length=0;for(const key of [...cache.keys()])if(key.startsWith('roof/'))cache.delete(key);
+  function reset(){playerLayers=new WeakMap();rigShadows=new WeakMap();coopFalls.clear();playerFall=null;playerShadow=null;corpses.length=0;casings.length=0;for(const key of [...cache.keys()])if(key.startsWith('roof/'))cache.delete(key);
     for(const k of ['artX','artY','animPhase','artFacing','artMoving','artRecoil','artHit','artShotUntil'])delete player[k];}
-  return {artDeathPreview,tile,pickupSprite,artCached:key=>cache.get(key),update,updateDeaths,shot,hit,death,playerDeath,fallFrame,charredFallFrame,drone,equipmentBeacons,militaryPulse,microMissile,reset,sprite,weapon,actor,caster,playerCaster,enemyPose,fragments,aimPose,aimRig,drawActors,drawCorpses,ground,buildings,pickups,airdrops,airdropBeacons,airdropLight,beaconPulse,pelletTrail,rockets,grenades,explosions,particles,
+  return {artDeathPreview,tile,revive:id=>coopFalls.delete(id),crawlSprite,pickupSprite,artCached:key=>cache.get(key),update,updateDeaths,shot,hit,death,playerDeath,fallFrame,charredFallFrame,drone,equipmentBeacons,militaryPulse,microMissile,reset,sprite,weapon,actor,caster,playerCaster,enemyPose,fragments,aimPose,aimRig,drawActors,drawCorpses,ground,buildings,pickups,airdrops,airdropBeacons,airdropLight,beaconPulse,pelletTrail,rockets,grenades,explosions,particles,
     charredDirections:CHARRED_DIRECTIONS,
     get playerFall(){return playerFall;},
     get deathStates(){return corpses.map(d=>({id:d.id,type:d.type,age:d.age,boss:d.boss,charred:d.charred,fallDirection:d.fallDirection,parts:d.parts.length,settled:d.charred?d.age>=1.4:d.parts.every(p=>p.settled),impactPlayed:d.impactPlayed,retiring:d.retireAge!==null,alpha:corpseAlpha(d)}));},

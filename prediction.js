@@ -13,19 +13,20 @@ const NetPrediction=(()=>{
     // Link the server's consumed input to the local input timeline, without trusting
     // a client-supplied duration or requiring synchronized wall clocks.
     const boundary=acknowledged===undefined?time:Math.min(time,acknowledged+(authority.ackAge||0)*1000);
-    if(!initial&&authority.hp>0&&acknowledged!==undefined){
+    if(!initial&&(authority.hp>0||authority.downed)&&acknowledged!==undefined){
       for(const frame of history){
         const begin=Math.max(boundary,frame.start),end=Math.min(time,frame.end);
         if(end>begin)SurvivorMotion.step(motion,(end-begin)/1000,{...frame.input,dash:frame.input.dash&&begin===frame.start});
       }
     }
-    const force=initial||authority.hp<=0||Math.hypot(oldX-motion.x,oldY-motion.y)>120;
+    const force=initial||(authority.hp<=0&&!authority.downed)||!!p.downed!==!!authority.downed||Math.hypot(oldX-motion.x,oldY-motion.y)>120;
     offsetX=force?0:oldX-motion.x;offsetY=force?0:oldY-motion.y;
     lastSnapshotAt=time;confirmed=authority.shotSerial||0;
+    if(authority.downed||authority.hp<=0){shots.clear();nextShotAt=0;pendingDash=false;}
     for(const [key,at] of sent)if(key<authority.ackSeq-2)sent.delete(key);
     history=history.filter(f=>f.end>time-1800);
     for(const [key,shot] of shots)if(time-shot.at>8000)shots.delete(key);
-    if(authority.hp<=0){history=[];pendingDash=false;offsetX=offsetY=0;}
+    if(authority.hp<=0&&!authority.downed){history=[];pendingDash=false;offsetX=offsetY=0;}
     present(p);
   }
   function present(p){
@@ -35,7 +36,7 @@ const NetPrediction=(()=>{
     moveWithWallCollision(p,offsetX,offsetY);
   }
   function update(dt,active,fresh){
-    if(!motion||player.hp<=0)return;
+    if(!motion||(player.hp<=0&&!player.downed))return;
     if(!fresh){history=[];pendingDash=false;return;}
     const end=now(),start=end-dt*1000,controls=input(state.keys,active);
     // A long suspended tab is re-based by the next authoritative snapshot.

@@ -212,7 +212,7 @@ const BUILDINGS_CLOSED=true; // Temporary closure; false restores door access.
 const AIRDROP_LOOT=Object.freeze({standard:Object.freeze(['gatling','rocket','flamethrower']),military:Object.freeze(['arc','drone'])});
 const WORLD={w:3600,h:2400,road:[],buildings:[]};
 const state={running:false,gameOver:false,paused:false,loading:true,loadProgress:0,loadDone:false,vhsTime:0,mouse:{x:SW/2,y:SH/2},keys:new Set(),pellets:[],zombies:[],particles:[],decals:[],pickups:[],grenades:[],explosions:[],airdrops:[],rockets:[],flameParticles:[],fireZones:[],damageTexts:[],wave:1,kills:0,score:0,surviveTime:0,spawnTimer:0,waveTimer:0,screenFlash:0,cameraShake:0,best:Number(localStorage.getItem('dead_town_supply_v2_best')||0),bossSpawned:false,bossAnnouncement:0,airdropAnnouncement:0,buffAnnouncement:'',buffAnnouncementType:'upgrade',buffAnnouncementTimer:0,airdropTimer:35,militaryAirdropTimer:60,airdropAnnouncementType:'standard',deathAnim:0,time:0,nextBossTime:90,nextEntityId:1,playerName:localStorage.getItem('dead_town_player_name')||'Player',keybinds:{grenade:keyStorageValue('dead_town_keybind_grenade','G'),molotov:keyStorageValue('dead_town_keybind_molotov','F')},devMode:false,menuScreen:'main',overlayScreen:'none',leaderboard:[],leaderboardLoading:false,leaderboardError:'',leaderboardLoaded:false,leaderboardSyncing:false};
-let player={x:WORLD.w/2,y:WORLD.h/2,radius:10,speed:175,speedMul:1,damageMul:1,hp:100,maxHp:100,grenades:1,molotovs:0,shootCooldown:0,reloadTimer:0,wasReloading:false,dashCooldown:0,dashTime:0,dashFacing:0,dashSpinDir:1,faceDir:1,hurtTimer:0,dashVX:0,dashVY:0,rocketJumpTime:0,rocketJumpVX:0,rocketJumpVY:0,knockbackTime:0,knockbackVX:0,knockbackVY:0,weapon:'shotgun',mag:6,magSize:6,gatlingAmmo:0,rocketAmmo:0,flameAmmo:0,arcAmmo:0};
+let player={...PlayerSkins.load(),x:WORLD.w/2,y:WORLD.h/2,radius:10,speed:175,speedMul:1,damageMul:1,hp:100,maxHp:100,grenades:1,molotovs:0,shootCooldown:0,reloadTimer:0,wasReloading:false,dashCooldown:0,dashTime:0,dashFacing:0,dashSpinDir:1,faceDir:1,hurtTimer:0,dashVX:0,dashVY:0,rocketJumpTime:0,rocketJumpVX:0,rocketJumpVY:0,knockbackTime:0,knockbackVX:0,knockbackVY:0,weapon:'shotgun',mag:6,magSize:6,gatlingAmmo:0,rocketAmmo:0,flameAmmo:0,arcAmmo:0};
 const SELF_EXPLOSIVE_DAMAGE_MULT=0.125;
 const ROCKET_JUMP_DURATION=0.5;
 const ROCKET_JUMP_BASE_SPEED=420;
@@ -223,22 +223,22 @@ const FLAME_VELOCITY_DAMPING_PER_SECOND=0.42;
 function scaleDamage(v){return v*(player.damageMul||1);}
 function spawnBossSerum(x,y){const buffs=['speed','damage','health'];const buff=buffs[Math.floor(Math.random()*buffs.length)];state.pickups.push({type:'serum',buff,x,y,radius:11,phase:Math.random()*Math.PI*2,ttl:40});}
 function applySerumBuff(buff){if(buff==='damage'){player.damageMul*=1.10;state.buffAnnouncement=T[lang].serumDamage;}else if(buff==='speed'){player.speedMul*=1.05;state.buffAnnouncement=T[lang].serumSpeed;}else{player.maxHp+=15;player.hp=Math.min(player.maxHp,player.hp+15);state.buffAnnouncement=T[lang].serumHealth;}state.buffAnnouncementType='upgrade';state.buffAnnouncementTimer=2.6;Coop.emit('notice',{id:player.id,kind:'serum',value:buff});playPickup();}
-function triggerBloaterDeathBurst(x,y,deadIndex=-1,creditPlayer=true){AudioEngine.variant('gore',3,{x,y,volume:0.42,group:'bloater',interval:0.08});const radius=74;state.explosions.push({x,y,radius:0,maxRadius:radius,life:0.22,maxLife:0.22,ring:0,rocket:false,bloaterBurst:true});for(let i=0;i<18;i++){const a=Math.random()*Math.PI*2,s=rand(40,180);state.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(10,40),life:rand(0.18,0.38),maxLife:0.38,size:rand(2,5),color:Math.random()>0.45?'rgba(140,210,90,0.75)':'rgba(110,160,70,0.6)',drag:0.93});}state.cameraShake=Math.max(state.cameraShake,4.5);Coop.each(()=>{const pd=dist(player.x,player.y,x,y);if(pd<radius+player.radius&&Town.lineClear(x,y,player.x,player.y)){const dealt=Math.max(1,12-pd*0.11);damagePlayer(dealt,x,y,{ignoreInvincibility:true});}});for(const other of [...state.zombies]){if(other.hp<=0||BossAttack.airborne(other)||!state.zombies.includes(other))continue;const d=dist(other.x,other.y,x,y);if(d<radius+other.radius&&Town.lineClear(x,y,other.x,other.y)){const dealt=Math.max(6,34-d*0.28)*(creditPlayer?player.damageMul:1);other.hp-=dealt;PixelArt.hit(other);addDamageText(other.x+rand(-10,10),other.y-other.radius-10,dealt,'#b9ff7a');if(other.hp<=0){handleZombieDeath(state.zombies.indexOf(other),creditPlayer);}}}}
-function handleZombieDeath(index,creditPlayer=true,cause='normal'){
+function triggerBloaterDeathBurst(x,y,deadIndex=-1,creditPlayer=true,owner=player.id||'player'){AudioEngine.variant('gore',3,{x,y,volume:0.42,group:'bloater',interval:0.08});const radius=74;state.explosions.push({x,y,radius:0,maxRadius:radius,life:0.22,maxLife:0.22,ring:0,rocket:false,bloaterBurst:true});for(let i=0;i<18;i++){const a=Math.random()*Math.PI*2,s=rand(40,180);state.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(10,40),life:rand(0.18,0.38),maxLife:0.38,size:rand(2,5),color:Math.random()>0.45?'rgba(140,210,90,0.75)':'rgba(110,160,70,0.6)',drag:0.93});}state.cameraShake=Math.max(state.cameraShake,4.5);Coop.each(()=>{const pd=dist(player.x,player.y,x,y);if(pd<radius+player.radius&&Town.lineClear(x,y,player.x,player.y)){const dealt=Math.max(1,12-pd*0.11);damagePlayer(dealt,x,y,{ignoreInvincibility:true});}});for(const other of [...state.zombies]){if(other.hp<=0||BossAttack.airborne(other)||!state.zombies.includes(other))continue;const d=dist(other.x,other.y,x,y);if(d<radius+other.radius&&Town.lineClear(x,y,other.x,other.y)){const dealt=Math.max(6,34-d*0.28)*(creditPlayer?player.damageMul:1);other.hp-=dealt;PixelArt.hit(other);addDamageText(other.x+rand(-10,10),other.y-other.radius-10,dealt,'#b9ff7a');if(other.hp<=0){handleZombieDeath(state.zombies.indexOf(other),creditPlayer,'normal',owner);}}}}
+function handleZombieDeath(index,creditPlayer=true,cause='normal',owner=player.id||'player'){
   const z=state.zombies[index];if(!z)return;
   PixelArt.death(z,cause);const deathX=z.x,deathY=z.y,deathType=z.type,burn=z.burn;
   const charred=cause==='fire'&&z.type!=='boss'&&z.type!=='bloater';
   Burning.clear(z);
   if(!charred)blood(z.x,z.y,z.type==='bloater'||z.type==='boss'?24:14,'rgba(130,18,18,0.95)',z.type==='boss'?1.15:1.05);
   if(z.type==='boss')spawnBossSerum(z.x,z.y);else maybeSpawnPickup(z.x,z.y);
-  if(creditPlayer){state.score+=z.score;state.kills++;}
+  if(creditPlayer)Coop.award(z.score,owner);
   if(!charred)playGore(z.x,z.y);
   state.zombies.splice(index,1);
   if(deathType==='bloater'){
-    triggerBloaterDeathBurst(deathX,deathY,-1,creditPlayer);
+    triggerBloaterDeathBurst(deathX,deathY,-1,creditPlayer,owner);
     // The body is already removed before damage can recurse into other deaths.
     // Burning alone is insufficient: the final hit must actually be fire.
-    if(cause==='fire')Burning.igniteNearby(deathX,deathY,burn?.mult??player.damageMul,creditPlayer);
+    if(cause==='fire')Burning.igniteNearby(deathX,deathY,burn?.mult??player.damageMul,creditPlayer,owner);
   }
 }
 
@@ -305,7 +305,7 @@ function bindMenuButtons(){
   const auto=$('devStormAuto');if(auto&&!auto.dataset.bound){auto.dataset.bound='1';auto.checked=Weather.automatic;auto.onchange=()=>Weather.setAutomatic(auto.checked);}
   for(const [id,fn] of setup){const el=$(id); if(el && !el.dataset.devBound){el.dataset.devBound='1'; el.addEventListener('click',fn);}}
 }
-function startGameFromMenu(){ resetGame(); }
+function startGameFromMenu(){ Object.assign(player,PlayerSkins.load());resetGame(); }
 function showDefaultNameStartPrompt(){
   state.overlayScreen='default-name-warning';
   const t=T[lang];
@@ -334,8 +334,9 @@ function controlGuide(){const zh=lang==='zh';return `<ul class="controlGuide">${
 function renderMainMenu(){
   state.overlayScreen='main';
   const t=T[lang],zh=lang==='zh';
-  showMenu('mainCard',`${menuHeader(zh?'幸存者终端':'SURVIVOR TERMINAL',true)}<div class="mainGrid"><section class="hero"><div class="eyebrow">${zh?'隔离区 / 无尽尸潮':'QUARANTINE ZONE / ENDLESS HORDE'}</div><h1 class="heroTitle">${pixelTitle()}</h1><div class="heroCopy"><p>${t.start1}</p></div><div class="playerStrip"><span class="label">${t.nameLabel}</span><strong>${escapeHtml(state.playerName)}</strong></div><button id="startBtn" class="primary startButton"><span>${t.startBtn}</span><span class="arrow" aria-hidden="true">→</span></button><button id="onlineBtn" class="primary startButton onlineButton"><span>${zh?'多人合作':'Online Co-op'}</span><span>↗</span></button><nav class="menuButtons" aria-label="${zh?'主菜单':'Main menu'}"><button id="renameBtn">${zh?'修改名字':'Change Name'}<span class="buttonIndex" aria-hidden="true">01</span></button><button id="openKeybindMenuBtn">${t.openKeybindMenu}<span class="buttonIndex" aria-hidden="true">02</span></button><button id="devUnlockBtn">${state.devMode?(zh?'开发者 · 已解锁':'Developer · unlocked'):t.devUnlock}<span class="buttonIndex" aria-hidden="true">03</span></button><button id="menuLangBtn">${zh?'中文 / EN':'EN / 中文'}<span class="buttonIndex" aria-hidden="true">04</span></button></nav>${AudioEngine.settingsHTML(lang)}</section><aside class="menuSide"><div class="recordStrip"><span class="label">${zh?'个人纪录':'PERSONAL RECORD'}<br>${t.best}</span><strong id="menuBest">${Math.floor(state.best)}</strong></div><div id="leaderboardPanel" data-leaderboard-panel="main">${leaderboardCardMarkup()}</div><div class="creatorCard"><img class="creditAvatar" src="assets/avatar.png" width="64" height="64" alt="CEDRRRIIICCC"><div><span class="label">${t.createdBy}</span><strong class="creatorName">CEDRRRIIICCC</strong><p class="creatorNote">${zh?'本游戏在 ChatGPT 的协助下完成':'Created with the assistance of ChatGPT'}</p></div></div></aside></div>${menuFooter()}`);
+  showMenu('mainCard',`${menuHeader(zh?'幸存者终端':'SURVIVOR TERMINAL',true)}<div class="mainGrid"><section class="hero"><div class="eyebrow">${zh?'隔离区 / 无尽尸潮':'QUARANTINE ZONE / ENDLESS HORDE'}</div><h1 class="heroTitle">${pixelTitle()}</h1><div class="heroCopy"><p>${t.start1}</p></div><div class="playerStrip"><span class="label">${t.nameLabel}</span><strong>${escapeHtml(state.playerName)}</strong></div><button id="startBtn" class="primary startButton"><span>${t.startBtn}</span><span class="arrow" aria-hidden="true">→</span></button><button id="onlineBtn" class="primary startButton onlineButton"><span>${zh?'多人合作':'Online Co-op'}</span><span>↗</span></button><nav class="menuButtons" aria-label="${zh?'主菜单':'Main menu'}"><button id="renameBtn">${zh?'修改名字':'Change Name'}<span class="buttonIndex" aria-hidden="true">01</span></button><button id="openKeybindMenuBtn">${t.openKeybindMenu}<span class="buttonIndex" aria-hidden="true">02</span></button><button id="devUnlockBtn">${state.devMode?(zh?'开发者 · 已解锁':'Developer · unlocked'):t.devUnlock}<span class="buttonIndex" aria-hidden="true">03</span></button><button id="menuLangBtn">${zh?'中文 / EN':'EN / 中文'}<span class="buttonIndex" aria-hidden="true">04</span></button></nav>${AudioEngine.settingsHTML(lang)}</section><aside class="menuSide"><div class="recordStrip"><span class="label">${zh?'个人纪录':'PERSONAL RECORD'}<br>${t.best}</span><strong id="menuBest">${Math.floor(state.best)}</strong></div>${PlayerSkins.markup(player)}<div id="leaderboardPanel" data-leaderboard-panel="main">${leaderboardCardMarkup()}</div><div class="creatorCard"><img class="creditAvatar" src="assets/avatar.png" width="64" height="64" alt="CEDRRRIIICCC"><div><span class="label">${t.createdBy}</span><strong class="creatorName">CEDRRRIIICCC</strong><p class="creatorNote">${zh?'本游戏在 ChatGPT 的协助下完成':'Created with the assistance of ChatGPT'}</p></div></div></aside></div>${menuFooter()}`);
   AudioEngine.bindSettings();
+  PlayerSkins.bind($('overlayCard'),player,a=>{Object.assign(player,a);renderMainMenu();});
   $('onlineBtn').onclick=()=>Net.open();
   $('renameBtn').onclick=promptPlayerName;$('startBtn').onclick=handleStartAttempt;
   $('openKeybindMenuBtn').onclick=()=>{state.menuScreen='keybinds';applyLang();};
@@ -588,7 +589,7 @@ function updateHUD(){
 }
 
 // ── Session lifecycle ──
-function resetGame(seed){FrameStats.reset();DevHorde.reset();Burning.clear(player);closeMenuDialog();state.keys.clear();mouseDown=false;generateWorld(seed);BossAttack.reset();PixelArt.reset();Arsenal.reset();Lighting.reset();AudioEngine.reset();Weather.reset();state.menuScreen='main';state.overlayScreen='none';state.running=true;$('overlay').classList.add('hidden');updateCursorVisibility(); const tipEl=$('tip'); if(tipEl) tipEl.style.display='none';state.gameOver=false;state.paused=false;ensureAudio();startBGM();setBGMLevel(0.05);state.pellets=[];state.zombies=[];state.particles=[];state.decals=[];state.pickups=[];state.grenades=[];state.explosions=[];state.airdrops=[];state.rockets=[];state.flameParticles=[];state.fireZones=[];state.damageTexts=[];state.wave=1;state.kills=0;state.score=0;state.surviveTime=0;state.spawnTimer=0;state.waveTimer=0;state.screenFlash=0;state.cameraShake=0;state.bossSpawned=false;state.bossAnnouncement=0;state.airdropAnnouncement=0;state.buffAnnouncement='';state.buffAnnouncementType='upgrade';state.buffAnnouncementTimer=0;state.airdropTimer=35;state.militaryAirdropTimer=60;state.airdropAnnouncementType='standard';state.deathAnim=0;state.time=0;state.nextBossTime=90;player.x=WORLD.w/2;player.y=WORLD.h/2;player.speedMul=1;player.damageMul=1;player.hp=player.maxHp;player.grenades=1;player.molotovs=0;player.shootCooldown=0;player.reloadTimer=0;player.wasReloading=false;player.dashCooldown=0;player.dashTime=0;player.hurtTimer=0;player.dashVX=0;player.dashVY=0;player.rocketJumpTime=0;player.rocketJumpVX=0;player.rocketJumpVY=0;player.knockbackTime=0;player.knockbackVX=0;player.knockbackVY=0;player.dashFacing=0;player.dashSpinDir=1;player.faceDir=1;player.weapon='shotgun';player.mag=6;player.magSize=6;player.gatlingAmmo=0;player.rocketAmmo=0;player.flameAmmo=0;player.arcAmmo=0;if($('devStormAuto'))$('devStormAuto').checked=true;$('overlay').classList.add('hidden');    updateHUD();updateLoadingUI();updateDevPanel();updateGameUI();}
+function resetGame(seed){FrameStats.reset();DevHorde.reset();Burning.clear(player);closeMenuDialog();state.keys.clear();mouseDown=false;generateWorld(seed);BossAttack.reset();PixelArt.reset();Arsenal.reset();Lighting.reset();AudioEngine.reset();Weather.reset();state.menuScreen='main';state.overlayScreen='none';state.running=true;$('overlay').classList.add('hidden');updateCursorVisibility(); const tipEl=$('tip'); if(tipEl) tipEl.style.display='none';state.gameOver=false;state.paused=false;ensureAudio();startBGM();setBGMLevel(0.05);state.pellets=[];state.zombies=[];state.particles=[];state.decals=[];state.pickups=[];state.grenades=[];state.explosions=[];state.airdrops=[];state.rockets=[];state.flameParticles=[];state.fireZones=[];state.damageTexts=[];state.wave=1;state.kills=0;state.score=0;state.surviveTime=0;state.spawnTimer=0;state.waveTimer=0;state.screenFlash=0;state.cameraShake=0;state.bossSpawned=false;state.bossAnnouncement=0;state.airdropAnnouncement=0;state.buffAnnouncement='';state.buffAnnouncementType='upgrade';state.buffAnnouncementTimer=0;state.airdropTimer=35;state.militaryAirdropTimer=60;state.airdropAnnouncementType='standard';state.deathAnim=0;state.time=0;state.nextBossTime=90;player.dead=false;player.downed=false;player.downRemaining=0;player.reviveProgress=0;player.reviverId=null;player.reviveShield=0;player.score=0;player.kills=0;player.x=WORLD.w/2;player.y=WORLD.h/2;player.speedMul=1;player.damageMul=1;player.hp=player.maxHp;player.grenades=1;player.molotovs=0;player.shootCooldown=0;player.reloadTimer=0;player.wasReloading=false;player.dashCooldown=0;player.dashTime=0;player.hurtTimer=0;player.dashVX=0;player.dashVY=0;player.rocketJumpTime=0;player.rocketJumpVX=0;player.rocketJumpVY=0;player.knockbackTime=0;player.knockbackVX=0;player.knockbackVY=0;player.dashFacing=0;player.dashSpinDir=1;player.faceDir=1;player.weapon='shotgun';player.mag=6;player.magSize=6;player.gatlingAmmo=0;player.rocketAmmo=0;player.flameAmmo=0;player.arcAmmo=0;if($('devStormAuto'))$('devStormAuto').checked=true;$('overlay').classList.add('hidden');    updateHUD();updateLoadingUI();updateDevPanel();updateGameUI();}
 function endGame(){if(Coop.die())return;if(state.gameOver)return;FrameStats.suspend();DevHorde.reset();Burning.clear(player);PixelArt.playerDeath();Arsenal.stop();Weather.arm(false);AudioEngine.silenceCombat();state.running=false;state.gameOver=true;updateCursorVisibility();state.paused=false;setBGMLevel(0.024);state.deathAnim=1.8;state.keys.clear();mouseDown=false;if(state.score>state.best){state.best=state.score;savePersonalBest();}submitLeaderboardScore(state.score);updateDevPanel();}
 function goToMainMenu(){if(Coop.client){Net.leave();return;}FrameStats.suspend();DevHorde.reset();Burning.clear(player);closeMenuDialog();BossAttack.reset();PixelArt.reset();Arsenal.reset();AudioEngine.reset();Weather.reset();state.menuScreen='main';state.overlayScreen='main';state.running=false;state.gameOver=false;state.paused=false;setBGMLevel(0.024);state.deathAnim=0;mouseDown=false;state.keys.clear(); const tipEl=$('tip'); if(tipEl) tipEl.style.display=''; applyLang();$('overlay').classList.remove('hidden');loadLeaderboard(true);syncPlayerBest();updateDevPanel();updateGameUI();}
 function showGameOverOverlay(){state.overlayScreen='gameover';applyLang();$('overlay').classList.remove('hidden');}
@@ -683,7 +684,7 @@ function giveAirdropWeapon(choice=null,kind='standard'){
   state.buffAnnouncement=(lang==='zh'?'空投：':'Airdrop: ')+T[lang][choice];state.buffAnnouncementType='equipment';state.buffAnnouncementTimer=2.6;Coop.emit('notice',{id:player.id,kind:'equipment',value:choice});return choice;
 }
 
-function camera(){if(Coop.client&&player.hp<=0){const p=Coop.living()[0]||player;return {x:clamp(p.x-SW/2,0,Math.max(0,WORLD.w-SW)),y:clamp(p.y-SH/2,0,Math.max(0,WORLD.h-SH))};}const shakeX=state.cameraShake>0?Math.sin(state.time*113.3)*state.cameraShake:0,shakeY=state.cameraShake>0?Math.cos(state.time*137.7)*state.cameraShake:0;return{x:clamp(player.x-SW/2+shakeX,0,WORLD.w-SW),y:clamp(player.y-SH/2+shakeY,0,WORLD.h-SH)};}
+function camera(){if(Coop.client&&player.hp<=0&&!player.downed){const p=Coop.living()[0]||player;return {x:clamp(p.x-SW/2,0,Math.max(0,WORLD.w-SW)),y:clamp(p.y-SH/2,0,Math.max(0,WORLD.h-SH))};}const shakeX=state.cameraShake>0?Math.sin(state.time*113.3)*state.cameraShake:0,shakeY=state.cameraShake>0?Math.cos(state.time*137.7)*state.cameraShake:0;return{x:clamp(player.x-SW/2+shakeX,0,WORLD.w-SW),y:clamp(player.y-SH/2+shakeY,0,WORLD.h-SH)};}
 function worldToScreen(wx,wy,cam){return{x:wx-cam.x,y:wy-cam.y};}
 
 // ── Weapons and damage ──
@@ -741,15 +742,15 @@ function explode(g,kind='normal'){const rocket=kind==='rocket';const molotov=kin
     }
   }
   });
-  for(const z of [...state.zombies].reverse()){if(z.hp<=0||!state.zombies.includes(z)||BossAttack.airborne(z))continue;const d=dist(g.x,g.y,z.x,z.y);if(d<rad&&Town.lineClear(g.x,g.y,z.x,z.y)){let dealt;if(rocket&&z.type==='boss'){dealt=Math.max(140,300-d*0.6)*(g.damageMul??player.damageMul);}else{dealt=Math.max(rocket?80:30,(rocket?175:125)-d*0.78)*(g.damageMul??player.damageMul);}z.hp-=dealt;PixelArt.hit(z);playHit(z.x,z.y,rocket?'rocket':'grenade');addDamageText(z.x+rand(-8,8),z.y-z.radius-10,dealt,'#ffd84d');if(z.hp<=0){handleZombieDeath(state.zombies.indexOf(z));}}}}
+  for(const z of [...state.zombies].reverse()){if(z.hp<=0||!state.zombies.includes(z)||BossAttack.airborne(z))continue;const d=dist(g.x,g.y,z.x,z.y);if(d<rad&&Town.lineClear(g.x,g.y,z.x,z.y)){let dealt;if(rocket&&z.type==='boss'){dealt=Math.max(140,300-d*0.6)*(g.damageMul??player.damageMul);}else{dealt=Math.max(rocket?80:30,(rocket?175:125)-d*0.78)*(g.damageMul??player.damageMul);}z.hp-=dealt;PixelArt.hit(z);playHit(z.x,z.y,rocket?'rocket':'grenade');addDamageText(z.x+rand(-8,8),z.y-z.radius-10,dealt,'#ffd84d');if(z.hp<=0){handleZombieDeath(state.zombies.indexOf(z),true,'normal',g.owner||player.id||'player');}}}}
 function maybeSpawnPickup(x,y){const r=Math.random();if(r<0.04)state.pickups.push({type:'med',x,y,radius:8,ttl:40});else if(r<0.09)state.pickups.push({type:'grenade',x,y,radius:8,ttl:40});else if(r<0.135)state.pickups.push({type:'molotov',x,y,radius:10,phase:Math.random()*Math.PI*2,ttl:40});}
-function damagePlayer(amount,sourceX=null,sourceY=null,options={}){if(state.gameOver||player.hp<=0||amount<=0)return;const ignoreInvincibility=!!options.ignoreInvincibility;if((!ignoreInvincibility&&(player.hurtTimer>0||player.dashTime>0||player.rocketJumpTime>0))||state.deathAnim>0)return;player.hp-=amount;PixelArt.hit(player);AudioEngine.variant('hit',3,{volume:0.3,group:'hurt',interval:0.15});addDamageText(player.x+rand(-8,8),player.y-player.radius-10,amount,'#ff6767');player.hurtTimer=0.28;const isBossHit=sourceX!==null&&sourceY!==null&&state.zombies.some(z=>z.type==='boss'&&dist(z.x,z.y,sourceX,sourceY)<160);state.cameraShake=Math.max(state.cameraShake,options.fire ? .35 : isBossHit ? 9 : 1.8);state.screenFlash=Math.max(state.screenFlash,isBossHit?0.24:0.14);if(!options.fire)blood(player.x,player.y,12,'rgba(150,24,24,0.95)',1.1);if(player.hp<=0){player.hp=0;endGame();}}
+function damagePlayer(amount,sourceX=null,sourceY=null,options={}){if(state.gameOver||player.hp<=0||amount<=0||player.reviveShield>0)return;const ignoreInvincibility=!!options.ignoreInvincibility;if((!ignoreInvincibility&&(player.hurtTimer>0||player.dashTime>0||player.rocketJumpTime>0))||state.deathAnim>0)return;player.hp-=amount;PixelArt.hit(player);AudioEngine.variant('hit',3,{volume:0.3,group:'hurt',interval:0.15});addDamageText(player.x+rand(-8,8),player.y-player.radius-10,amount,'#ff6767');player.hurtTimer=0.28;const isBossHit=sourceX!==null&&sourceY!==null&&state.zombies.some(z=>z.type==='boss'&&dist(z.x,z.y,sourceX,sourceY)<160);state.cameraShake=Math.max(state.cameraShake,options.fire ? .35 : isBossHit ? 9 : 1.8);state.screenFlash=Math.max(state.screenFlash,isBossHit?0.24:0.14);if(!options.fire)blood(player.x,player.y,12,'rgba(150,24,24,0.95)',1.1);if(player.hp<=0){player.hp=0;endGame();}}
 
 // ── Keyboard and mouse input ──
 let mouseDown=false;
 addEventListener('mousemove',e=>{state.mouse.x=e.clientX;state.mouse.y=e.clientY;});
 addEventListener('mousedown',e=>{
-  if(ArtStudio.isOpen||e.target!==canvas||e.button!==0||!state.running||state.gameOver||state.paused)return;
+  if((Coop.client&&SquadUI.typing)||ArtStudio.isOpen||e.target!==canvas||e.button!==0||!state.running||state.gameOver||state.paused)return;
   ensureAudio();startBGM();state.mouse.x=e.clientX;state.mouse.y=e.clientY;
   if(Weather.armed&&state.devMode){const cam=camera();Weather.arm(false);devStrike(cam.x+e.clientX,cam.y+e.clientY);mouseDown=false;updateDevPanel();return;}
   mouseDown=true;if(Coop.client)Net.action('shoot');
@@ -851,6 +852,8 @@ function launchPlayerKnockback(dirX,dirY,speed,time){
 
 // ── Simulation ──
 function updateSurvivor(dt){
+  player.reviveShield=Math.max(0,(player.reviveShield||0)-dt);
+  if(player.downed){SurvivorMotion.step(player,dt,{keys:state.keys,aimX:player.aimX});return;}
   if(player.hp<=0)return;
   let pressedShot=false,pressedDash=false;
   if(Coop.server){
@@ -888,7 +891,7 @@ function update(dt){
   if(state.airdropTimer<=0){state.airdropTimer=rand(50,75);spawnAirdrop('standard');}
   if(state.militaryAirdropTimer<=0){state.militaryAirdropTimer=rand(80,110);spawnAirdrop('military');}
   const spawnRate=Math.max(0.22,1.0-state.wave*0.05);while(state.spawnTimer>=spawnRate){state.spawnTimer-=spawnRate;spawnZombie();}
-  Coop.each(()=>updateSurvivor(dt));
+  for(const p of Coop.survivors())Coop.withPlayer(p,()=>updateSurvivor(dt));
   DevHorde.update(dt);
   Burning.update(dt);if(state.gameOver)return;
   Arsenal.update(dt);if(state.gameOver)return;
@@ -920,7 +923,7 @@ function update(dt){
     for(const z of [...state.zombies]){
       if(z.hp<=0||!state.zombies.includes(z)||BossAttack.airborne(z))continue;
       if(dist(zone.x,zone.y,z.x,z.y)<zone.radius+z.radius&&Town.lineClear(zone.x,zone.y,z.x,z.y)){
-        Burning.ignite(z,mult,zone.creditPlayer!==false);if(hit)Burning.hitZombie(z,18*mult,mult,zone.creditPlayer!==false);
+        Burning.ignite(z,mult,zone.creditPlayer!==false,zone.owner);if(hit)Burning.hitZombie(z,18*mult,mult,zone.creditPlayer!==false,true,zone.owner);
       }
     }
     if(hit)zone.hitTick+=.18;
@@ -931,7 +934,7 @@ function update(dt){
       for(const z of [...state.zombies].reverse()){
         if(z.hp<=0||BossAttack.airborne(z)||!state.zombies.includes(z))continue;
         if(dist(z.x,z.y,f.x,f.y)<z.radius+f.size&&Town.lineClear(f.x,f.y,z.x,z.y)&&f.hitTick<=0){
-          f.hitTick=.06;Burning.hitZombie(z,f.damage,f.damageMul??f.damage/.8);
+          f.hitTick=.06;Burning.hitZombie(z,f.damage,f.damageMul??f.damage/.8,true,true,f.owner);
         }
       }
       if(Math.random()<0.72)state.particles.push({x:f.x,y:f.y,vx:rand(-28,28),vy:rand(-42,-6),life:rand(0.1,0.24),maxLife:0.24,size:rand(3,7),color:Math.random()>0.6?'rgba(255,210,120,0.66)':Math.random()>0.45?'rgba(255,130,35,0.74)':'rgba(255,90,20,0.68)',drag:0.88});
@@ -968,7 +971,7 @@ function update(dt){
         p.hitIds = p.hitIds || [];
         p.hitIds.push(z.id);
         if(z.hp<=0){
-          handleZombieDeath(j);
+          handleZombieDeath(j,true,'normal',p.owner);
         }
         if(p.penetration!=null){
           p.penetration--;
@@ -1067,6 +1070,7 @@ function update(dt){
   }
   }
   for(const z of state.zombies)if(!BossAttack.airborne(z))collideWithBuildings(z);
+  Coop.updateRescue(dt);
   updatePickups(dt);
   for(let i=state.particles.length-1;i>=0;i--){const p=state.particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=p.drag||0.95;p.vy*=p.drag||0.95;if(p.floaty)p.vy-=18*dt;p.life-=dt;if(p.life<=0)state.particles.splice(i,1);}for(let i=state.damageTexts.length-1;i>=0;i--){const t=state.damageTexts[i];t.y+=t.vy*dt;t.life-=dt;
     t.x += (t.dx||0)*dt;if(t.life<=0)state.damageTexts.splice(i,1);}if(state.running&&Math.random()<0.16&&state.deathAnim<=0){state.particles.push({x:player.x+10,y:player.y-4,vx:rand(-6,10),vy:rand(-28,-14),life:0.45,maxLife:0.45,size:rand(3,5),color:'rgba(110,110,110,0.35)',drag:0.98,floaty:true});}
@@ -1123,19 +1127,19 @@ function drawParticles(cam){PixelArt.particles(cam);}
 function drawPickups(cam){PixelArt.pickups(cam);}
 function drawAirdrops(cam){PixelArt.airdrops(cam);}
 function drawPlayerStatus(cam,offset=0){
-  if(!state.running||state.gameOver||player.hp<=0)return;
-  const x=Math.round(player.x-cam.x),y=Math.round(player.y-cam.y-getPlayerJumpVisual().lift-44-offset),w=44,h=6;
+  if(!state.running||state.gameOver||(player.hp<=0&&!player.downed))return;
+  const x=Math.round(player.x-cam.x),y=Math.round(player.y-cam.y-getPlayerJumpVisual().lift-(player.downed?25:44)-offset),w=44,h=6;
   ctx.save();ctx.imageSmoothingEnabled=false;ctx.fillStyle='#07100e';ctx.fillRect(x-w/2-1,y-1,w+2,h+2);
   ctx.fillStyle='#39443b';ctx.fillRect(x-w/2,y,w,h);ctx.fillStyle=player.hp<25?'#e55c50':'#aac28d';
   ctx.fillRect(x-w/2,y,Math.round(w*clamp(player.hp/player.maxHp,0,1)),h);
   ctx.font='bold 11px "Courier New","Microsoft YaHei",monospace';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.lineWidth=3;ctx.strokeStyle='#08100d';
-  ctx.strokeText(state.playerName,x,y-5);ctx.fillStyle='#e1e9d7';ctx.fillText(state.playerName,x,y-5);ctx.restore();
+  ctx.strokeText(state.playerName,x,y-5);ctx.fillStyle=!Coop.client||player.id===Net.id?'#ffffff':'#7ec5ff';ctx.fillText(state.playerName,x,y-5);ctx.restore();
 }
 function drawSurvivorStatus(cam){
   if(!Coop.client){drawPlayerStatus(cam);return;}
   const labels=[];ctx.save();ctx.font='bold 11px "Courier New","Microsoft YaHei",monospace';
-  for(const p of Coop.living())Coop.withPlayer(p,()=>{
-    const x=p.x-cam.x,y=p.y-cam.y-getPlayerJumpVisual().lift-44,w=Math.max(48,Math.min(160,ctx.measureText(p.name||'').width+8));
+  for(const p of Coop.survivors())Coop.withPlayer(p,()=>{
+    const x=p.x-cam.x,y=p.y-cam.y-getPlayerJumpVisual().lift-(p.downed?25:44),w=Math.max(48,Math.min(160,ctx.measureText(p.name||'').width+8));
     if(x<-100||x>SW+100||y<-100||y>SH+100)return;
     let offset=0;while(labels.some(r=>Math.abs(r.x-x)<(r.w+w)/2&&Math.abs(r.y-(y-offset))<25))offset+=27;
     labels.push({x,y:y-offset,w});drawPlayerStatus(cam,offset);
@@ -1149,7 +1153,7 @@ function drawLowHealthVignette(){
   g.addColorStop(0,'rgba(130,0,8,0.018)');g.addColorStop(.5,`rgba(145,3,12,${strength*.2*pulse})`);g.addColorStop(1,`rgba(170,4,16,${strength*pulse})`);
   ctx.fillStyle=g;ctx.fillRect(0,0,SW,SH);ctx.restore();
 }
-function drawCrosshair(){if(!state.running||state.gameOver) return; const x=px(state.mouse.x),y=px(state.mouse.y);ctx.strokeStyle='rgba(240,220,210,0.85)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x-6,y);ctx.moveTo(x+6,y);ctx.lineTo(x+16,y);ctx.moveTo(x,y-16);ctx.lineTo(x,y-6);ctx.moveTo(x,y+6);ctx.lineTo(x,y+16);ctx.stroke();if(player.reloadTimer>0){const total=WEAPONS[player.weapon].reload,ratio=clamp(1-player.reloadTimer/total,0,1);ctx.strokeStyle='rgba(0,0,0,0.45)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,18,-Math.PI/2,Math.PI*1.5);ctx.stroke();ctx.strokeStyle='rgba(255,176,124,0.95)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,18,-Math.PI/2,-Math.PI/2+Math.PI*2*ratio);ctx.stroke();}}
+function drawCrosshair(){if(!state.running||state.gameOver||player.hp<=0||(Coop.client&&SquadUI.typing)) return; const x=px(state.mouse.x),y=px(state.mouse.y);ctx.strokeStyle='rgba(240,220,210,0.85)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.moveTo(x-16,y);ctx.lineTo(x-6,y);ctx.moveTo(x+6,y);ctx.lineTo(x+16,y);ctx.moveTo(x,y-16);ctx.lineTo(x,y-6);ctx.moveTo(x,y+6);ctx.lineTo(x,y+16);ctx.stroke();if(player.reloadTimer>0){const total=WEAPONS[player.weapon].reload,ratio=clamp(1-player.reloadTimer/total,0,1);ctx.strokeStyle='rgba(0,0,0,0.45)';ctx.lineWidth=5;ctx.beginPath();ctx.arc(x,y,18,-Math.PI/2,Math.PI*1.5);ctx.stroke();ctx.strokeStyle='rgba(255,176,124,0.95)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,18,-Math.PI/2,-Math.PI/2+Math.PI*2*ratio);ctx.stroke();}}
 function drawFog(cam){ Lighting.render(cam); }
 function drawReloadBar(){if(player.reloadTimer<=0)return;const total=WEAPONS[player.weapon].reload,ratio=1-player.reloadTimer/total,w=180,h=10,x=SW/2-w/2,y=SH-32;pxRect(x,y,w,h,'rgba(255,255,255,0.12)');pxRect(x,y,w*ratio,h,'#ffb07c');}
 function drawBossHealthBars(cam){
@@ -1251,7 +1255,7 @@ function drawMinimap(cam){
   for(const z of state.zombies)if(z.hp>0)ctx.fillRect(mx+z.x*sx,my+z.y*sy,z.type==='boss'?4:2,z.type==='boss'?4:2);
   ctx.fillStyle='#7fc4ff';
   for(const a of state.airdrops)ctx.fillRect(mx+a.x*sx-2,my+a.y*sy-2,5,5);
-  if(Coop.client){ctx.fillStyle='#b6dc8a';for(const p of Coop.living())if(p!==player)ctx.fillRect(mx+p.x*sx-2,my+p.y*sy-2,4,4);}
+  if(Coop.client){ctx.fillStyle='#b6dc8a';for(const p of Coop.survivors())if(p!==player)ctx.fillRect(mx+p.x*sx-2,my+p.y*sy-2,4,4);}
   const px=clamp(Math.round(mx+player.x*sx),mx+3,mx+mw-4),py=clamp(Math.round(my+player.y*sy),my+3,my+mh-4);
   ctx.fillStyle='#101719';ctx.fillRect(px-3,py-3,7,7);
   ctx.fillStyle='#ffda55';ctx.fillRect(px-2,py-2,5,5);
@@ -1283,7 +1287,7 @@ function drawVHSOverlay(){
   }
 }
 
-function render(){updateGameUI(); const tipEl=$('tip'); if(tipEl) tipEl.style.display=(state.running && !state.gameOver)?'none':''; ctx.clearRect(0,0,SW,SH);const cam=camera();drawGround(cam);drawBuildings(cam);TownArt.props(cam);PixelArt.drawCorpses(cam);BossAttack.drawWorld(cam);drawPickups(cam);drawAirdrops(cam);drawGrenades(cam);drawPellets(cam);drawRockets(cam);Arsenal.drawMissiles(cam);PixelArt.drawActors(cam);Burning.draw(cam);Arsenal.drawDrones(cam);TownArt.canopies(cam);TownLights.drawAtmosphere(cam);drawExplosions(cam);Arsenal.drawImpacts(cam);drawParticles(cam);drawFog(cam);TownLights.drawEmissive(cam);PixelArt.airdropBeacons(cam);PixelArt.equipmentBeacons(cam);Weather.drawRain(cam);Weather.drawStrikes(cam);Arsenal.drawArcs(cam);Weather.drawController(cam);BossAttack.drawWarnings(cam);drawLowHealthVignette();drawSurvivorStatus(cam);drawCrosshair();drawBossHealthBars(cam);drawAnnouncement();drawMinimap(cam);Arsenal.drawHUD();TownArt.location();drawVHSOverlay();if(state.deathAnim>0){const a=state.deathAnim/1.8;ctx.fillStyle=`rgba(120,0,0,${0.5*(1-a)})`;ctx.fillRect(0,0,SW,SH);}}
+function render(){updateGameUI(); const tipEl=$('tip'); if(tipEl) tipEl.style.display=(state.running && !state.gameOver)?'none':''; ctx.clearRect(0,0,SW,SH);const cam=camera();drawGround(cam);drawBuildings(cam);TownArt.props(cam);PixelArt.drawCorpses(cam);BossAttack.drawWorld(cam);drawPickups(cam);drawAirdrops(cam);drawGrenades(cam);drawPellets(cam);drawRockets(cam);Arsenal.drawMissiles(cam);PixelArt.drawActors(cam);Burning.draw(cam);Arsenal.drawDrones(cam);TownArt.canopies(cam);TownLights.drawAtmosphere(cam);drawExplosions(cam);Arsenal.drawImpacts(cam);drawParticles(cam);drawFog(cam);TownLights.drawEmissive(cam);PixelArt.airdropBeacons(cam);PixelArt.equipmentBeacons(cam);Weather.drawRain(cam);Weather.drawStrikes(cam);Arsenal.drawArcs(cam);Weather.drawController(cam);BossAttack.drawWarnings(cam);drawLowHealthVignette();drawSurvivorStatus(cam);SquadUI.draw(cam);drawCrosshair();drawBossHealthBars(cam);drawAnnouncement();drawMinimap(cam);Arsenal.drawHUD();TownArt.location();drawVHSOverlay();if(state.deathAnim>0){const a=state.deathAnim/1.8;ctx.fillStyle=`rgba(120,0,0,${0.5*(1-a)})`;ctx.fillRect(0,0,SW,SH);}}
 // ── Main loop ──
 let last=performance.now();
 function loop(now){

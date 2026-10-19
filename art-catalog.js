@@ -27,6 +27,18 @@ const ArtCatalog=(()=>{
     for(const kind of Object.keys(names).filter(k=>k!=='player'))for(const pose of ['idle','walk','hurt','attack','charge','airborne','recover'])for(let d=0;d<4;d++)for(let v=0;v<3;v++){
       add(`actor/${kind}/${pose}/${d}/${v}`,'actors',[`${names[kind][0]} · ${pose} · ${dirNames[d]} · ${v+1}`,`${names[kind][1]} · ${poses[pose]} · ${dirNames[d]} · 外观${v+1}`],8,{source:'pixel-art.js',generator:'sprite',args:[kind,pose,'FRAME',d,v,false],frameRate:8},f=>PixelArt.sprite(kind,pose,f,d,v));
     }
+    // Every selectable appearance exports its real shared animation frames.
+    for(const skin of PlayerSkins.skins)for(let colorId=0;colorId<4;colorId++){
+      const appearance={skinId:skin.id,colorId},prefix=`look/${skin.id}/${colorId}`,labels=[PlayerSkins.label(appearance,'en'),PlayerSkins.label(appearance,'zh')];
+      for(const pose of ['idle','walk','hurt','airborne'])for(let sector=0;sector<8;sector++){
+        const dir=[1,0,0,0,3,2,2,2][sector];add(`${prefix}/${pose}/${sector}`,'actors',[`${labels[0]} · ${pose} · ${sector*45}°`,`${labels[1]} · ${poses[pose]} · ${sector*45}°`],8,{source:'pixel-art.js',generator:'sprite',args:['player',pose,'FRAME',dir,sector,true,appearance],frameRate:8},f=>PixelArt.sprite('player',pose,f,dir,sector,true,appearance));
+      }
+      for(const dir of [1,3]){
+        add(`${prefix}/roll/${dir}`,'actors',[`${labels[0]} · roll · ${dirNames[dir]}`,`${labels[1]} · 翻滚 · ${dirNames[dir]}`],8,{source:'pixel-art.js',generator:'sprite',args:['player','roll','FRAME',dir,0,false,appearance],frameRate:24},f=>PixelArt.sprite('player','roll',f,dir,0,false,appearance));
+        add(`${prefix}/crawl/${dir}`,'actors',[`${labels[0]} · crawl · ${dirNames[dir]}`,`${labels[1]} · 匍匐 · ${dirNames[dir]}`],8,{source:'pixel-art.js',generator:'crawlSprite',appearance,frameRate:8},f=>PixelArt.crawlSprite({...appearance,faceDir:dir===3?-1:1,artMoving:true,animPhase:f*Math.PI/4+.001}));
+        add(`${prefix}/fall/${dir}`,'actors',[`${labels[0]} · fall · ${dirNames[dir]}`,`${labels[1]} · 倒地 · ${dirNames[dir]}`],23,{source:'pixel-art.js',generator:'fallFrame',args:['player','FRAME/20',dir,0,appearance],frameRate:20},f=>PixelArt.fallFrame('player',(f+.001)/20,dir,0,appearance));
+      }
+    }
     // Player body sheets follow the eight actual aiming sectors (not enemy variants).
     for(const pose of ['idle','walk','hurt','airborne'])for(let sector=0;sector<8;sector++){
       const d=[1,0,0,0,3,2,2,2][sector];add(`actor/player/${pose}/aim${sector}`,'actors',[`Player · ${pose} · aim ${sector*45}°`,`主角 · ${poses[pose]} · 瞄准${sector*45}°`],8,{source:'pixel-art.js',generator:'sprite',args:['player',pose,'FRAME',d,sector,true],frameRate:8},f=>PixelArt.sprite('player',pose,f,d,sector,true));
