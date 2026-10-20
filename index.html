@@ -4,8 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dead Town — Survival & Co-op</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="art-studio.css" />
+  <!-- Startup shell is inline so slow/missing styles cannot hide the loader. -->
+  <style>
+    html,body{margin:0;background:#0c1010;color:#e8e8d5;font-family:"Courier New","Microsoft YaHei",monospace}
+    .hidden,[hidden]{display:none!important}
+    .loadingOverlay{box-sizing:border-box;position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:#0b110f}
+    .loadingCard{box-sizing:border-box;width:min(100%,500px);padding:40px;border:1px solid #353d37;background:repeating-linear-gradient(0deg,#111a14 0 3px,#101713 3px 4px)}
+    .loadingCard .eyebrow{font-size:11px;letter-spacing:1.5px;color:#b8bc88}.loadingCard .signalDot{display:inline-block;width:6px;height:6px;background:#df4b3f;margin-right:8px}
+    .loadingTitle{font-family:Impact,"Arial Black",monospace;font-size:80px;line-height:.9;letter-spacing:-3px;margin:28px 0}.loadingTitle span{color:#df4b3f}
+    .loadingCard .menuSubtle{color:#a2aaa0;font-size:12px;overflow-wrap:anywhere}.loadingBar{height:8px;background:#303a2d;margin:28px 0 12px}.loadingFill{height:100%;width:0;background:#df4b3f}
+    .loadingMeta{display:flex;justify-content:space-between;color:#a2aaa0;font-size:11px}.loadingCount{font-size:11px;color:#b8bc88;margin:16px 0 6px}.loadingDetail{font-size:11px;color:#a2aaa0;line-height:1.6;overflow-wrap:anywhere;margin:0}
+    .loadingCard button{margin-top:18px;font:inherit;font-size:12px;color:#e8e8d5;border:1px solid #465047;background:#1c2421;padding:10px 16px;cursor:pointer}.loadingCard button:hover{background:#2b3630}
+    @media(max-width:580px){.loadingCard{padding:28px}.loadingTitle{font-size:70px}}
+  </style>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -44,13 +55,17 @@
 <section id="squadPanel" class="squadPanel hidden" aria-label="Squad status and score ranking"></section>
 <div class="overlay" id="overlay"><main class="card" id="overlayCard"></main></div>
 <div class="dialogOverlay hidden" id="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="dialogTitle"></div>
-<div class="loadingOverlay" id="loadingOverlay" role="status">
+<div class="loadingOverlay" id="loadingOverlay" role="status" aria-live="polite" aria-busy="true">
   <div class="loadingCard">
     <div class="eyebrow"><i class="signalDot"></i> DEAD TOWN / INITIALIZING</div>
     <h2 class="loadingTitle">DEAD<br><span>TOWN</span></h2>
     <p id="loadingText" class="menuSubtle">Initializing signal...</p>
-    <div class="loadingBar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" id="loadingProgress"><div class="loadingFill" id="loadingFill"></div></div>
+    <div class="loadingBar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadingProgress"><div class="loadingFill" id="loadingFill"></div></div>
     <div class="loadingMeta"><span id="loadingVersion"></span><span id="loadingMeta">0%</span></div>
+    <p class="loadingCount" id="loadingCount">Preparing resources…</p>
+    <p class="loadingDetail" id="loadingDetail"></p>
+    <button id="loadingRetry" hidden onclick="location.reload()">Reload / 重新加载</button>
+    <noscript><p class="menuSubtle">Please enable JavaScript to play. / 请启用 JavaScript 后刷新。</p></noscript>
   </div>
 </div>
 
@@ -91,30 +106,44 @@
   </details>
 </div>
 
-<script src="version.js"></script>
-<script src="assets/audio-bank.js"></script>
-<script src="player-skins.js"></script>
-<script src="coop.js"></script>
-<script src="movement.js"></script>
-<script src="town.js"></script>
-<script src="town-art.js"></script>
-<script src="town-lights.js"></script>
-<script src="lighting.js"></script>
-<script src="audio.js"></script>
-<script src="weather.js"></script>
-<script src="boss.js"></script>
-<script src="pixel-art.js"></script>
-<script src="arsenal.js"></script>
-<script src="art-catalog.js"></script>
-<script src="art-workspace.js"></script>
-<script src="art-studio.js"></script>
-<script src="frame-stats.js"></script>
-<script src="burning.js"></script>
-<script src="dev-horde.js"></script>
-<script src="prediction.js"></script>
-<script src="squad-ui.js"></script>
-<script src="network.js"></script>
-<script src="game.js"></script>
 
 
+<script type="application/json" id="bootManifest">
+{
+  "styles": [
+    "style.css",
+    "art-studio.css"
+  ],
+  "images": [
+    "assets/avatar.png"
+  ],
+  "scripts": [
+    "version.js",
+    "assets/audio-bank.js",
+    "player-skins.js",
+    "coop.js",
+    "movement.js",
+    "town.js",
+    "town-art.js",
+    "town-lights.js",
+    "lighting.js",
+    "audio.js",
+    "weather.js",
+    "boss.js",
+    "pixel-art.js",
+    "arsenal.js",
+    "art-catalog.js",
+    "art-workspace.js",
+    "art-studio.js",
+    "frame-stats.js",
+    "burning.js",
+    "dev-horde.js",
+    "prediction.js",
+    "squad-ui.js",
+    "network.js",
+    "game.js"
+  ]
+}
+</script>
+<script src="boot.js" onerror="document.getElementById('loadingText').textContent='无法加载 / Could not load: boot.js';document.getElementById('loadingRetry').hidden=false"></script>
 </body></html>

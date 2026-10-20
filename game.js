@@ -245,13 +245,9 @@ function handleZombieDeath(index,creditPlayer=true,cause='normal',owner=player.i
 
 
 function updateLoadingUI(){
-  const overlay=$('loadingOverlay'), fill=$('loadingFill'), meta=$('loadingMeta'), txt=$('loadingText');
-  if(!overlay || !fill || !meta || !txt) return;
-  txt.textContent = state.loadDone ? T[lang].loadingReady : T[lang].loading;
-  fill.style.width = `${Math.floor(state.loadProgress*100)}%`;
-  meta.textContent = `${Math.floor(state.loadProgress*100)}%`;
-  $('loadingProgress')?.setAttribute?.('aria-valuenow',String(Math.floor(state.loadProgress*100)));
-  overlay.classList.toggle('hidden', !state.loading);
+  if(typeof DeadTownLoader!=='undefined'&&state.loading){DeadTownLoader.render();return;}
+  const overlay=$('loadingOverlay');
+  if(overlay)overlay.classList.toggle('hidden',!state.loading);
 }
 
 function updateGameUI(){ document.body.classList.toggle('ingame', state.running && !state.gameOver); document.body.classList.toggle('paused',state.paused); }
@@ -1297,10 +1293,8 @@ function loop(now){
   const dt=Math.min(Coop.client?.1:.033,(now-last)/1000);last=now;
   state.vhsTime += dt;
   if(state.loading){
-    state.loadProgress = Math.min(1, state.loadProgress + dt*0.55);
-    if(state.loadProgress >= 1 && !state.loadDone){ state.loadDone = true; }
-    if(state.loadDone && state.loadProgress >= 1){ state.loading = false; applyLang(); }
-    updateLoadingUI();
+    // Startup owns completion. Time passing must never finish a pending load.
+    requestAnimationFrame(loop);return;
   }else{
     update(dt);
   }
@@ -1308,4 +1302,17 @@ function loop(now){
   render();
   requestAnimationFrame(loop);
 }
-if(!Coop.server){restoreLeaderboardStorage(); resize(); applyLang(); loadLeaderboard(); syncPlayerBest(); flushLeaderboardScores(); playMenuOpen(); requestAnimationFrame(loop);}
+// Called only after all required scripts, styles and the portrait have loaded.
+async function prepareClient(task){
+  await task('audio',report=>AudioEngine.preload(report));
+  await task('menu',()=>{restoreLeaderboardStorage();resize();applyLang();});
+  await task('frame',()=>render());
+}
+let clientStarted=false;
+function startClient(){
+  if(Coop.server||clientStarted)return;clientStarted=true;
+  state.loadProgress=1;state.loadDone=true;state.loading=false;
+  updateLoadingUI();updateCursorVisibility();last=performance.now();requestAnimationFrame(loop);
+  // Online rankings are optional, and audio is unlocked by the first user gesture.
+  loadLeaderboard();syncPlayerBest();flushLeaderboardScores();
+}

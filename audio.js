@@ -14,6 +14,23 @@ const AudioEngine = (() => {
   try{const saved=JSON.parse(localStorage.getItem('deadtown_audio_v2')||'{}');for(const key of Object.keys(defaults))if(Number.isFinite(saved[key]))settings[key]=Math.max(0,Math.min(1,saved[key]));}catch{}
   let a,master,fx,ambience,reverbSend,compressor,ready=false;
   const buffers={},voices=new Set(),loops={},lastPlay={};
+  const decoded={};let preloadPromise=null;
+  function decodeSample(name,encoded){
+    if(decoded[name])return decoded[name];
+    const bytes=atob(encoded),data=new Float32Array(bytes.length/2);
+    for(let i=0;i<data.length;i++){let n=bytes.charCodeAt(i*2)|(bytes.charCodeAt(i*2+1)<<8);if(n>=32768)n-=65536;data[i]=n/32768;}
+    decoded[name]=data;return data;
+  }
+  function preload(report=()=>{}){
+    return preloadPromise||(preloadPromise=(async()=>{
+      const samples=Object.entries(DEADTOWN_AUDIO_BANK.samples);
+      for(let i=0;i<samples.length;i++){
+        decodeSample(...samples[i]);report((i+1)/samples.length);
+        // Chunk actual decoding, allowing the loading bar to repaint on slow CPUs.
+        if(i%3===2)await new Promise(resolve=>setTimeout(resolve,0));
+      }
+    })());
+  }
   let lastFlame=-10,flameActive=false,stepDistance=0,lastX=null,lastY=null,groanTimer=2,foot=0;
   const pendingHits=new Map();
   const lastStepVariant={};
@@ -46,9 +63,8 @@ const AudioEngine = (() => {
     reverb.buffer=ir;reverbSend=a.createGain();reverbSend.gain.value=0.14;
     reverbSend.connect(highpass);highpass.connect(reverb);reverb.connect(fx);
     for(const [name,encoded] of Object.entries(DEADTOWN_AUDIO_BANK.samples)){
-      const bytes=atob(encoded);const b=a.createBuffer(1,bytes.length/2,DEADTOWN_AUDIO_BANK.sampleRate);const data=b.getChannelData(0);
-      for(let i=0;i<data.length;i++){let n=bytes.charCodeAt(i*2)|(bytes.charCodeAt(i*2+1)<<8);if(n>=32768)n-=65536;data[i]=n/32768;}
-      buffers[name]=b;
+      const pcm=decodeSample(name,encoded),b=a.createBuffer(1,pcm.length,DEADTOWN_AUDIO_BANK.sampleRate);
+      b.getChannelData(0).set(pcm);buffers[name]=b;delete decoded[name];
     }
     // Short deterministic electrical discharge: crackle, coil whine and a decaying zap.
     const electric=a.createBuffer(1,Math.floor(a.sampleRate*0.25),a.sampleRate),samples=electric.getChannelData(0);
@@ -187,7 +203,7 @@ const AudioEngine = (() => {
   }
   function bindSettings(){for(const key of Object.keys(defaults)){const input=document.getElementById('audio-'+key);if(!input)continue;input.oninput=()=>{init();settings[key]=Number(input.value)/100;document.getElementById('audio-'+key+'-value').textContent=input.value+'%';applySettings();try{localStorage.setItem('deadtown_audio_v2',JSON.stringify(settings));}catch{}};}}
   document.addEventListener('visibilitychange',()=>{hidden=document.hidden;if(hidden){silenceCombat();silenceWeather();for(const name of Object.keys(loops))loop(name,0);}});
-  return {init,play,variant,shot,hit,thunder,update,reset,silenceCombat,settingsHTML,bindSettings,spatial,weatherSpatial,surfaceAt,
+  return {init,preload,play,variant,shot,hit,thunder,update,reset,silenceCombat,settingsHTML,bindSettings,spatial,weatherSpatial,surfaceAt,
     ambientLevel(value){if(!a)return;loop('rain_loop',value<=0.024?0.018:0.065,{cutoff:6200,fade:0.35});},
     get settings(){return {...settings};},get voiceCount(){return voices.size;}};
 })();
