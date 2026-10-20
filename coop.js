@@ -40,17 +40,35 @@ const Coop = (() => {
     player.wasReloading=false;player.artShotUntil=0;Burning.clear(player);
     player.input={keys:new Set(),fire:false};
     emit('playerDown',{id:player.id,name:player.name,x:player.x,y:player.y});
+    endIfNoRescuer();
     return true;
   }
-  function finishDeath(p){
+  function markDead(p){
     if(p.dead)return;p.dead=true;p.downed=false;p.hp=0;p.downRemaining=0;p.reviveProgress=0;p.reviverId=null;
     p.input={keys:new Set(),fire:false,actions:[]};Burning.clear(p);
     emit('playerDeath',{id:p.id,name:p.name,x:p.x,y:p.y});
-    if(!survivors().length){state.running=false;state.gameOver=true;Arsenal.stop();}
+  }
+  function endIfNoRescuer(){
+    if(!server||state.gameOver||!all().length||living().length)return false;
+    // Downed survivors cannot rescue one another. Finish the whole team in
+    // the same authoritative transition, with exactly one death per survivor.
+    for(const p of all())markDead(p);
+    state.running=false;state.gameOver=true;Arsenal.stop();return true;
+  }
+  function finishDeath(p){markDead(p);endIfNoRescuer();}
+  function canRescue(p,dt){
+    if(p.dashTime>0||p.rocketJumpTime>0)return false;
+    const keys=p.input?.keys||new Set();
+    const movingX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
+    const movingY=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
+    // Damage and passive displacement do not cancel help. Voluntary movement
+    // still requires standing still; range and line of sight are checked below.
+    if((p.hurtTimer>0||p.knockbackTime>0)&&!movingX&&!movingY)return true;
+    return !p.knockbackTime&&Math.hypot(p.x-(p.rescueX??p.x),p.y-(p.rescueY??p.y))<=Math.max(.12,dt*4);
   }
   function updateRescue(dt){
-    if(!server)return;
-    const helpers=living().filter(p=>!p.dashTime&&!p.rocketJumpTime&&!p.knockbackTime&&Math.hypot(p.x-(p.rescueX??p.x),p.y-(p.rescueY??p.y))<=Math.max(.12,dt*4));
+    if(!server||state.gameOver||endIfNoRescuer())return;
+    const helpers=living().filter(p=>canRescue(p,dt));
     const occupied=new Set();
     for(const p of survivors().filter(p=>p.downed)){
       p.downRemaining=Math.max(0,p.downRemaining-dt);
