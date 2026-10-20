@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dead Town — Survival & Co-op</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="art-studio.css" />
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud" aria-label="Game status">
+  <div class="hudTop">
+    <div class="panel combatStats">
+      <div class="hudMark" aria-hidden="true">DT<span>LIVE</span></div>
+      <div><div class="label" id="lWave">Wave</div><div class="value" id="wave">1</div></div>
+      <div><div class="label" id="lKills">Kills</div><div class="value" id="kills">0</div></div>
+      <div><div class="label" id="lScore">Score</div><div class="value" id="score">0</div></div>
+      <div><div class="label" id="lTime">Time</div><div class="value" id="time">00:00</div></div>
+      <div class="bestStat"><div class="label" id="lBest">Best</div><div class="value" id="best">0</div></div>
+    </div>
+    <div class="hudTools">
+      <div class="hudButtons"><button id="langBtn">EN / 中文</button><button id="pauseBtn">Pause <kbd>Esc</kbd></button></div>
+      <div class="performanceStats panel" id="performanceStats" aria-label="Frame rate and 1% low">
+        <span>FPS <strong id="fpsValue">—</strong></span><span>1% LOW <strong id="lowFpsValue">—</strong><small>30s</small></span>
+      </div>
+    </div>
+  </div>
+  <div class="hudBottom panel">
+    <div class="vitals" id="vitals">
+      <div class="label" id="lHp">Health</div><div class="healthValue"><span id="hp">100</span><small id="maxHp">/ 100</small></div>
+      <div class="meter"><i id="healthFill"></i></div>
+    </div>
+    <div class="loadout">
+      <div class="weaponLine"><span class="label" id="lWeapon">Weapon</span><strong id="weapon">Shotgun</strong></div>
+      <div class="ammoLine"><span class="label" id="lAmmo">Ammo</span><strong id="ammo">6 / 6</strong><span class="label" id="lReserve">Reserve</span><span id="reserve">∞</span></div>
+      <div class="meter ammoMeter"><i id="ammoFill"></i></div>
+      <div class="throwableLine"><span class="label" id="lGrenades">Throwables</span><span id="grenades">G 1 · F 0</span></div>
+    </div>
+  </div>
+  <p id="desc" class="srOnly"></p>
+</div>
+<section id="squadPanel" class="squadPanel hidden" aria-label="Squad status and score ranking"></section>
+<div class="overlay" id="overlay"><main class="card" id="overlayCard"></main></div>
+<div class="dialogOverlay hidden" id="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="dialogTitle"></div>
+<div class="loadingOverlay" id="loadingOverlay" role="status">
+  <div class="loadingCard">
+    <div class="eyebrow"><i class="signalDot"></i> DEAD TOWN / INITIALIZING</div>
+    <h2 class="loadingTitle">DEAD<br><span>TOWN</span></h2>
+    <p id="loadingText" class="menuSubtle">Initializing signal...</p>
+    <div class="loadingBar" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" id="loadingProgress"><div class="loadingFill" id="loadingFill"></div></div>
+    <div class="loadingMeta"><span id="loadingVersion"></span><span id="loadingMeta">0%</span></div>
+  </div>
+</div>
+
+<section id="artStudio" class="artStudio hidden" role="dialog" aria-modal="true" aria-label="Art Studio"></section>
+<div id="netStatus" class="hidden" role="status"></div>
+<div class="tip hidden" id="tip"></div>
+<div id="devPanel" class="panel hidden">
+  <div id="devPanelTitle" class="eyebrow">DEV PANEL</div>
+  <button id="devArtBtn" class="primary" style="width:100%;margin-bottom:12px">Art Studio</button>
+  <div class="devGrid">
+    <button id="devShotgunBtn">Shotgun</button>
+    <button id="devGatlingBtn">Gatling</button>
+    <button id="devRocketBtn">Rocket</button>
+    <button id="devFlameBtn">Flamethrower</button>
+    <button id="devArcBtn">Arc Rifle</button>
+    <button id="devDroneBtn">Deploy Drone</button>
+    <button id="devMilitaryDropBtn">Military airdrop</button>
+    <button id="devHealBtn">Heal</button>
+    <button id="devThrowablesBtn">Throwables</button>
+    <button id="devChargerBtn">Charger</button>
+    <button id="devBossBtn">Boss</button>
+    <button id="devBloaterBtn">Bloater</button>
+  </div>
+  <details class="stormController hordeController">
+    <summary id="devHordeTitle">Horde stress test</summary>
+    <label><span id="devHordeCountLabel">Count (25–1000)</span><input id="devHordeCount" type="number" min="25" max="1000" step="25" value="100"></label>
+    <p id="devHordeHint" class="menuSubtle">Batches of 20; up to 2000 test enemies. Clear removes test enemies only.</p>
+    <div class="controls"><button id="devHordeSpawnBtn">Spawn Horde</button><button id="devHordeClearBtn">Clear test horde</button></div>
+    <p id="devHordeStatus" class="menuSubtle" role="status" aria-live="polite"></p>
+  </details>
+  <details class="stormController">
+    <summary id="devStormTitle">Lightning controller</summary>
+    <label><span id="devRadiusLabel">Radius</span><input id="devStrikeRadius" type="number" min="0" max="250" value="42"></label>
+    <label><span id="devPlayerDamageLabel">Player damage</span><input id="devStrikePlayerDamage" type="number" min="0" max="5000" value="35"></label>
+    <label><span id="devZombieDamageLabel">Zombie damage</span><input id="devStrikeZombieDamage" type="number" min="0" max="5000" value="120"></label>
+    <label><span id="devStormAutoLabel">Natural storms</span><input id="devStormAuto" type="checkbox" checked></label>
+    <div class="controls"><button id="devAimStrikeBtn">Choose impact point</button><button id="devRandomStrikeBtn">Random strike</button><button id="devPlayerStrikeBtn">Strike at player</button></div>
+  </details>
+</div>
+
+<script src="version.js"></script>
+<script src="assets/audio-bank.js"></script>
+<script src="player-skins.js"></script>
+<script src="coop.js"></script>
+<script src="movement.js"></script>
+<script src="town.js"></script>
+<script src="town-art.js"></script>
+<script src="town-lights.js"></script>
+<script src="lighting.js"></script>
+<script src="audio.js"></script>
+<script src="weather.js"></script>
+<script src="boss.js"></script>
+<script src="pixel-art.js"></script>
+<script src="arsenal.js"></script>
+<script src="art-catalog.js"></script>
+<script src="art-workspace.js"></script>
+<script src="art-studio.js"></script>
+<script src="frame-stats.js"></script>
+<script src="burning.js"></script>
+<script src="dev-horde.js"></script>
+<script src="prediction.js"></script>
+<script src="squad-ui.js"></script>
+<script src="network.js"></script>
+<script src="game.js"></script>
+
+
+</body></html>
