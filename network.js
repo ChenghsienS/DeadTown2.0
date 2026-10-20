@@ -4,7 +4,8 @@ const Net=(()=>{
   let originalPlayer=null,originalDev=false,sequence=0,actions=[],lastEvent=0,packetAt=0,ping=0,lastPing=0,endAt=0;
   let lastTransmit=0,flushTimer=null,countdownRemaining=0,countdownAt=0;
   let inputTimer=null,connectTimer=null,lastSnapshot=null,round=0,disconnectReason='';
-  const targets=new Map(),zh=()=>lang==='zh',tr=(a,b)=>zh()?a:b;
+  const PREDICTION_GRACE=1200;
+  const zh=()=>lang==='zh',tr=(a,b)=>zh()?a:b;
   const errors={chat_fast:['发送太快，请稍等一秒。','Please wait a second before sending again.'],version:['版本不一致，请刷新网页后重试。','Version mismatch. Refresh this page.'],name:['请输入昵称。','Enter a nickname.'],room_name:['请输入房间名。','Enter a room name.'],capacity:['房间人数只能为 2–4 人。','Capacity must be 2–4.'],password:['房间密码不正确。','Incorrect room password.'],room_full:['房间已满。','Room is full.'],server_full:['服务器房间已满。','Server room limit reached.'],room_missing:['房间已经关闭。','Room no longer exists.'],in_progress:['这一局已经开始，请等待下一局。','This match has started. Wait for the next round.'],host_only:['只有房主可以执行此操作。','Only the room leader can do this.'],slow_down:['操作太快，请稍后重试。','Please wait a moment and try again.'],room_failed:['房间启动失败，可以重新准备后重试。','Room failed to start. Ready up and try again.']};
   function send(data){if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify(data));}
   function notice(text){status=text;const el=$('netMessage');if(el)el.textContent=text;}
@@ -61,7 +62,7 @@ const Net=(()=>{
     SquadUI.closeInput();menu=!menu;state.paused=menu;state.keys.clear();mouseDown=false;actions=[];transmit();
     if(menu)renderMenu();else{screen='game';$('overlay').classList.add('hidden');}SquadUI.mount();SquadUI.team();updateGameUI();updateCursorVisibility();
   }
-  function resetVisuals(){BossAttack.reset();PixelArt.reset();Arsenal.reset();Weather.reset();Lighting.reset();state.keys.clear();mouseDown=false;actions=[];targets.clear();NetPrediction.reset();clearTimeout(flushTimer);flushTimer=null;}
+  function resetVisuals(){BossAttack.reset();PixelArt.reset();Arsenal.reset();Weather.reset();Lighting.reset();state.keys.clear();mouseDown=false;actions=[];NetInterpolation.reset();NetPrediction.reset();clearTimeout(flushTimer);flushTimer=null;}
   function begin(s){
     SquadUI.closeInput();if(room)room.status='playing';round++;lastEvent=0;lastSnapshot=null;sequence=0;endAt=0;menu=false;screen='game';status='';resetVisuals();
     player={...originalPlayer,maxHp:100,hp:100};Coop.setRoster([player]);resetGame(s.seed);state.devMode=false;state.loading=false;state.loadDone=true;
@@ -75,21 +76,14 @@ const Net=(()=>{
       // These are full authoritative snapshots. An omitted burn means it ended;
       // Object.assign alone would resurrect the old flames after a revival.
       if(!o.burn||o.burn.remaining<=0||o.hp<=0||o.downed||o.dead)Burning.clear(p);
-      const previousTarget=targets.get(key+o.id),time=performance.now(),elapsed=previousTarget?(time-previousTarget.at)/1000:0;
-      const vx=elapsed>.025&&elapsed<.5?(o.x-previousTarget.x)/elapsed:0,vy=elapsed>.025&&elapsed<.5?(o.y-previousTarget.y)/elapsed:0;
-      const future={...o};
-      if(Math.hypot(vx,vy)<650){
-        if(key==='d'||BossAttack.airborne(o)){future.x+=vx*.065;future.y+=vy*.065;}
-        else if(key!=='p'||o.id!==id)moveWithWallCollision(future,vx*.065,vy*.065);
-      }
-      targets.set(key+o.id,{x:o.x,y:o.y,at:time,vx,vy,futureX:future.x,futureY:future.y});
-      if(!initial){p.x=x;p.y=y;}
+      const snap=NetInterpolation.track(key+o.id,o,initial);
+      if(!snap){p.x=x;p.y=y;}
       if(key==='p'&&o.id===id)NetPrediction.reconcile(o,p,initial||oldDown!==!!o.downed);
       return p;
     });
   }
   function applySnapshot(s,initial=false){
-    if(s.version!==GAME_VERSION)return;packetAt=performance.now();lastSnapshot=s;
+    if(s.version!==GAME_VERSION||!NetInterpolation.receive(s.tick))return;packetAt=performance.now();lastSnapshot=s;
     const players=actorList(s.players,Coop.all(),'p',initial);Coop.setRoster(players);player=players.find(p=>p.id===id)||players[0]||player;
     for(const [key,value] of Object.entries(s.world)){
       if(key==='zombies')state.zombies=actorList(value,state.zombies,'z',initial);
@@ -100,7 +94,7 @@ const Net=(()=>{
     const enemies=new Map(state.zombies.map(z=>[z.id,z]));for(const arc of s.arsenal.arcs){if(arc.entity)arc.entity=enemies.get(arc.entity.id)||arc.entity;if(arc.sourceEntity)arc.sourceEntity=enemies.get(arc.sourceEntity.id)||arc.sourceEntity;}
     s.arsenal.drones=actorList(s.arsenal.drones,Arsenal.drones,'d',initial);
     Arsenal.applySnapshot(s.arsenal);
-    const keep=new Set([...players.map(p=>'p'+p.id),...state.zombies.map(z=>'z'+z.id),...Arsenal.drones.map(d=>'d'+d.id)]);for(const key of targets.keys())if(!keep.has(key))targets.delete(key);
+    const keep=new Set([...players.map(p=>'p'+p.id),...state.zombies.map(z=>'z'+z.id),...Arsenal.drones.map(d=>'d'+d.id)]);NetInterpolation.prune(keep);
     Weather.applySnapshot(s.weather);BossAttack.impacts.splice(0,BossAttack.impacts.length,...s.bossImpacts);
     for(const e of s.events){if(e.n<=lastEvent)continue;lastEvent=e.n;effect(e);}
     if(s.world.gameOver&&!endAt){endAt=performance.now()+1800;state.paused=false;menu=false;}
@@ -142,10 +136,13 @@ const Net=(()=>{
   }
   function transmit(){
     clearTimeout(flushTimer);flushTimer=null;
-    if(!connected)return;lastTransmit=performance.now();
+    if(!connected||!socket||socket.readyState!==WebSocket.OPEN)return;
+    // Retain current keys and actions, rather than queuing stale inputs in TCP.
+    if((socket.bufferedAmount||0)>2048)return;
+    lastTransmit=performance.now();
     if(Date.now()-lastPing>2000){lastPing=Date.now();send({type:'ping',at:lastPing});}
     if(room?.status!=='playing'||!lastSnapshot)return;
-    const stale=performance.now()-packetAt>1500,active=!menu&&!SquadUI.typing&&!document.hidden&&!stale&&(player.hp>0||player.downed);
+    const stale=performance.now()-packetAt>PREDICTION_GRACE,active=!menu&&!SquadUI.typing&&!document.hidden&&!stale&&(player.hp>0||player.downed);
     const aim=Coop.aim(player,camera());
     NetPrediction.remember(++sequence);
     send({type:'input',seq:sequence,keys:active?[...state.keys]:[],aimX:aim.x,aimY:aim.y,fire:active&&!player.downed&&mouseDown,actions:active&&!player.downed?actions.splice(0):[]});if(!active)actions=[];
@@ -157,7 +154,7 @@ const Net=(()=>{
     if(wait<=0)transmit();else if(!flushTimer)flushTimer=setTimeout(transmit,wait);
   }
   function action(kind){
-    if(menu||SquadUI.typing||player.hp<=0||performance.now()-packetAt>1500)return;
+    if(menu||SquadUI.typing||player.hp<=0||performance.now()-packetAt>PREDICTION_GRACE)return;
     if(actions.length<5)actions.push(kind);NetPrediction.action(kind);flushInput();
   }
   function update(dt){
@@ -165,17 +162,12 @@ const Net=(()=>{
     if(!lastSnapshot)return;
     const lag=performance.now()-packetAt;
     if(lag<2000&&state.running){state.time+=dt;state.surviveTime+=dt;}
-    NetPrediction.update(dt,!menu&&!SquadUI.typing&&!document.hidden&&state.running,lag<350&&state.running);
-    const blend=1-Math.exp(-32*dt);
+    NetPrediction.update(dt,!menu&&!SquadUI.typing&&!document.hidden&&state.running,lag<PREDICTION_GRACE&&state.running);
+    NetInterpolation.advance(dt);
     for(const [list,key] of [[Coop.all(),'p'],[state.zombies,'z'],[Arsenal.drones,'d']])for(const p of list){
       if(key==='p'&&p.id===id)continue;
-      const t=targets.get(key+p.id);if(!t)continue;
-      // Short, bounded extrapolation keeps remote movement fluid between packets.
-      const ahead=Math.min(.065,Math.max(0,(performance.now()-t.at)/1000)),speed=Math.hypot(t.vx,t.vy);
-      const allowed=lag<250&&speed<650&&(p.hp!==0||p.downed)&&p.connected!==false;
-      const x=t.x+(allowed?(t.futureX-t.x)*ahead/.065:0),y=t.y+(allowed?(t.futureY-t.y)*ahead/.065:0);
-      if(Math.hypot(x-p.x,y-p.y)>200){p.x=t.x;p.y=t.y;}
-      else{p.x+=(x-p.x)*blend;p.y+=(y-p.y)*blend;}
+      const point=NetInterpolation.position(key+p.id,p,key==='d'||BossAttack.airborne(p));
+      if(point){p.x=point.x;p.y=point.y;}
     }
     // Advance visual ordnance between authoritative packets, never collision damage.
     if(lag<120){
@@ -192,8 +184,8 @@ const Net=(()=>{
     state.buffAnnouncementTimer=Math.max(0,state.buffAnnouncementTimer-dt);state.cameraShake=Math.max(0,state.cameraShake-dt*18);
     PixelArt.update(dt);BossAttack.updateEffects(dt);Arsenal.effects(dt);Weather.update(dt);updateHUD();SquadUI.update();
     if(endAt&&performance.now()>=endAt&&room?.status==='ended'&&screen!=='room'){renderRoom();endAt=0;}
-    const bar=$('netStatus');if(bar){bar.classList.remove('hidden');bar.textContent=lag>1500&&room?.status==='playing'?tr('等待服务器… 输入已停止','WAITING FOR SERVER… INPUT STOPPED'):player.downed&&state.running?tr(`倒地 · ${Math.ceil(player.downRemaining)} 秒 · WASD 匍匐 / Enter 聊天`,`DOWN · ${Math.ceil(player.downRemaining)}s · WASD CRAWL / ENTER CHAT`):player.hp<=0&&state.running?tr('已阵亡 · 正在观战队友 · Esc 打开菜单','FALLEN · SPECTATING · ESC MENU'):`${room?.id||''} · ${Coop.living().length}/${Coop.all().length} · ${Math.round(ping)} ms`;
-      bar.classList.toggle('warning',lag>1500&&room?.status==='playing');}
+    const bar=$('netStatus');if(bar){bar.classList.remove('hidden');bar.textContent=lag>PREDICTION_GRACE&&room?.status==='playing'?tr('等待服务器… 输入已停止','WAITING FOR SERVER… INPUT STOPPED'):lag>450&&room?.status==='playing'?tr('网络波动，正在同步…','CONNECTION UNSTABLE — SYNCING…'):player.downed&&state.running?tr(`倒地 · ${Math.ceil(player.downRemaining)} 秒 · WASD 匍匐 / Enter 聊天`,`DOWN · ${Math.ceil(player.downRemaining)}s · WASD CRAWL / ENTER CHAT`):player.hp<=0&&state.running?tr('已阵亡 · 正在观战队友 · Esc 打开菜单','FALLEN · SPECTATING · ESC MENU'):`${room?.id||''} · ${Coop.living().length}/${Coop.all().length} · ${Math.round(ping)} ms`;
+      bar.classList.toggle('warning',lag>450&&room?.status==='playing');}
   }
   function leave(){state.keys.clear();mouseDown=false;send({type:'leave'});}
   function exit(){
@@ -204,5 +196,5 @@ const Net=(()=>{
   const release=()=>{state.keys.clear();mouseDown=false;actions=[];flushInput();};
   addEventListener('blur',()=>{if(Coop.client)release();});
   document.addEventListener('visibilitychange',()=>{if(Coop.client&&document.hidden)release();});
-  return {open,update,action,releaseControls:release,chat:text=>send({type:'chat',text}),flushInput,leave,exit,toggleMenu,localize,get connected(){return connected;},get room(){return room;},get id(){return id;},get ping(){return ping;}};
+  return {open,update,action,releaseControls:release,chat:text=>send({type:'chat',text}),flushInput,leave,exit,toggleMenu,localize,get connected(){return connected;},get room(){return room;},get id(){return id;},get ping(){return ping;},get stats(){return {...NetInterpolation.stats,packetAge:performance.now()-packetAt,ping};}};
 })();

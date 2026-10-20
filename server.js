@@ -4,6 +4,7 @@ const {randomBytes,scryptSync,timingSafeEqual}=require('node:crypto');
 const {Worker}=require('node:worker_threads');
 const {WebSocketServer,WebSocket}=require('./server/vendor/ws');
 const PlayerSkins=require('./player-skins');
+const {SnapshotStream}=require('./server/snapshot-stream.cjs');
 const version=require('./package.json').version;
 const root=__dirname,KEYS=new Set(['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright','shift']);
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.wav':'audio/wav'};
@@ -43,6 +44,7 @@ function createHost(options={}){
     r.countdownTimer.unref();
   }
   function leave(c,notify=true){
+    c.stream?.reset();
     const r=rooms.get(c.room);c.room=null;c.ready=false;
     if(r){cancelCountdown(r);r.members.delete(c.id);r.worker?.postMessage({type:'disconnect',id:c.id});
       if(!r.members.size){const w=r.worker;r.worker=null;w?.terminate();rooms.delete(r.id);}
@@ -58,11 +60,8 @@ function createHost(options={}){
     worker.on('error',failure);worker.on('exit',code=>{if(code!==0&&r.worker===worker)failure('Worker exited '+code);});
     worker.on('message',m=>{
       if(r.worker!==worker||!rooms.has(r.id))return;
-      if(m.type==='started'){r.status='playing';for(const c of r.members.values()){c.sequence=-1;send(c,{type:'start',snapshot:m.snapshot});}announceRoom(r);announceLobby();}
-      else if(m.type==='snapshot'){const payload=m.payload;for(const c of r.members.values()){
-        if(c.ws.bufferedAmount>512*1024){c.ws.close(1013,'Connection too slow');continue;}
-        if(c.ws.readyState===WebSocket.OPEN)c.ws.send(payload);
-      }}
+      if(m.type==='started'){r.status='playing';for(const c of r.members.values()){c.stream.reset();c.sequence=-1;send(c,{type:'start',snapshot:m.snapshot});}announceRoom(r);announceLobby();}
+      else if(m.type==='snapshot'){for(const c of r.members.values())c.stream.offer(m.payload);}
       else if(m.type==='ended'){r.result={score:m.score,kills:m.kills,time:m.time,ranking:m.ranking};r.status='ended';r.worker=null;worker.terminate();for(const c of r.members.values())c.ready=false;announceRoom(r);announceLobby();}
     });
   }
@@ -115,7 +114,7 @@ function createHost(options={}){
     }
     if(m.type==='rematch'){
       if(c.id!==r.hostId)return error(c,'host_only');if(r.status!=='ended')return;
-      r.status='waiting';r.result=null;for(const p of r.members.values()){p.ready=false;send(p,{type:'reset'});}announceRoom(r);announceLobby();return;
+      r.status='waiting';r.result=null;for(const p of r.members.values()){p.stream.reset();p.ready=false;send(p,{type:'reset'});}announceRoom(r);announceLobby();return;
     }
     if(m.type==='input'){
       if(r.status!=='playing'||!r.worker)return;
@@ -133,7 +132,7 @@ function createHost(options={}){
     wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));
   });
   wss.on('connection',(ws,req)=>{
-    const c={ws,id:randomBytes(8).toString('hex'),ip:req.socket.remoteAddress,hello:false,room:null,name:'',ready:false,alive:true,sequence:-1,tokens:180,tokenTime:Date.now(),lastJoin:0,appearance:PlayerSkins.normalize(),chatTokens:4,chatAt:Date.now()};clients.set(c.id,c);
+    const c={ws,id:randomBytes(8).toString('hex'),ip:req.socket.remoteAddress,hello:false,room:null,name:'',ready:false,alive:true,sequence:-1,tokens:180,tokenTime:Date.now(),lastJoin:0,appearance:PlayerSkins.normalize(),chatTokens:4,chatAt:Date.now()};c.stream=new SnapshotStream(ws);clients.set(c.id,c);
     ws.on('pong',()=>c.alive=true);
     ws.on('message',data=>{try{const now=Date.now();c.tokens=Math.min(180,c.tokens+(now-c.tokenTime)*.09)-1;c.tokenTime=now;if(c.tokens<0)return ws.close(1008,'Rate limit');dispatch(c,JSON.parse(data));}catch{error(c,'bad_message');}});
     ws.on('error',()=>{});ws.on('close',()=>{clients.delete(c.id);leave(c,false);});

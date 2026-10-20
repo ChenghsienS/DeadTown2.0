@@ -119,7 +119,7 @@ const ArtCatalog=(()=>{
       if(kind==='player')Object.assign(player,{x:80,y:112,hp:100,burn:{remaining:3},rocketJumpTime:0,dashTime:0});else state.zombies=[o];
       PixelArt.actor(o,{x:0,y:0},kind==='player');Burning.draw({x:0,y:0});
     },{time:f/12}));
-    add('ui/avatar' ,'ui',['Author avatar','作者头像'],1,{source:'assets/avatar.png',generator:'image'},()=>image('assets/avatar.png'));
+    add('ui/avatar' ,'ui',['Author avatar','作者头像'],1,{source:'assets/author-avatar.png',generator:'image'},()=>image('assets/author-avatar.png'));
     add('ui/title','ui',['Pixel title','像素标题'],1,{source:'game.js',generator:'pixelTitle'},()=>{
       const c=surface(276,192),p=c.getContext('2d');
       for(const g of pixelTitle().matchAll(/<g fill="([^"]+)">([\s\S]*?)<\/g>/g)){p.fillStyle=g[1];for(const r of g[2].matchAll(/<rect x="(\d+)" y="(\d+)" width="1" height="1"\/>/g))p.fillRect(Number(r[1])*12,Number(r[2])*12,12,12);}return c;

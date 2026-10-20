@@ -19,12 +19,12 @@ const NetPrediction=(()=>{
         if(end>begin)SurvivorMotion.step(motion,(end-begin)/1000,{...frame.input,dash:frame.input.dash&&begin===frame.start});
       }
     }
-    const force=initial||(authority.hp<=0&&!authority.downed)||!!p.downed!==!!authority.downed||Math.hypot(oldX-motion.x,oldY-motion.y)>120;
+    const force=initial||(authority.hp<=0&&!authority.downed)||!!p.downed!==!!authority.downed||Math.hypot(oldX-motion.x,oldY-motion.y)>240;
     offsetX=force?0:oldX-motion.x;offsetY=force?0:oldY-motion.y;
     lastSnapshotAt=time;confirmed=authority.shotSerial||0;
     if(authority.downed||authority.hp<=0){shots.clear();nextShotAt=0;pendingDash=false;}
     for(const [key,at] of sent)if(key<authority.ackSeq-2)sent.delete(key);
-    history=history.filter(f=>f.end>time-1800);
+    history=history.filter(f=>f.end>time-3000);
     for(const [key,shot] of shots)if(time-shot.at>8000)shots.delete(key);
     if(authority.hp<=0&&!authority.downed){history=[];pendingDash=false;offsetX=offsetY=0;}
     present(p);
@@ -41,6 +41,7 @@ const NetPrediction=(()=>{
     const end=now(),start=end-dt*1000,controls=input(state.keys,active);
     // A long suspended tab is re-based by the next authoritative snapshot.
     if(history.length&&start-history.at(-1).end>200)history=[];
+    const beforeX=motion.x,beforeY=motion.y;
     const steps=Math.max(1,Math.ceil(dt/(1/30))),delta=dt/steps;
     for(let i=0;i<steps;i++){
       const entry={start:start+i*delta*1000,end:start+(i+1)*delta*1000,input:{...controls,dash:controls.dash&&i===0}};
@@ -48,8 +49,17 @@ const NetPrediction=(()=>{
       if(SurvivorMotion.step(motion,delta,entry.input)){playDash();lastDashAt=end;}
     }
     pendingDash=false;
-    while(history.length&&history[0].end<end-1800)history.shift();
-    const blend=Math.exp(-22*dt);offsetX*=blend;offsetY*=blend;present(player);
+    while(history.length&&history[0].end<end-3000)history.shift();
+    // Packet jitter must not turn a forward input into a backward visual step.
+    // Decay a small correction within a fraction of actual movement; at rest
+    // converge promptly. Large teleports / death still rebase immediately.
+    const distance=Math.hypot(offsetX,offsetY),travel=Math.hypot(motion.x-beforeX,motion.y-beforeY);
+    if(distance>0){
+      const moving=travel>dt*2,limit=moving?travel*.35:90*dt;
+      const correction=Math.min(distance*(1-Math.exp(-10*dt)),limit);
+      const scale=Math.max(0,1-correction/distance);offsetX*=scale;offsetY*=scale;
+    }
+    present(player);
     if(active&&mouseDown)fire();
   }
   function fire(){

@@ -1,13 +1,13 @@
 {
   "name": "deadtown",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "private": true,
   "description": "Dead Town pixel survival: offline solo and self-hosted authoritative co-op",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check boot.js && node --check version.js && node --check game.js && node --check lighting.js && node --check weather.js && node --check audio.js && node --check assets/audio-bank.js && node --check server.js && node --check boss.js && node --check pixel-art.js && node --check arsenal.js && node --check town.js && node --check town-art.js && node --check town-lights.js && node --check art-catalog.js && node --check art-workspace.js && node --check art-studio.js && node --check frame-stats.js && node --check burning.js && node --check dev-horde.js && node --check coop.js && node --check network.js && node --check server/simulation.cjs && node --check server/headless.js && node --check server/world.js && node --check server/room-worker.cjs && node --check movement.js && node --check prediction.js && node --check player-skins.js && node --check squad-ui.js",
+    "check": "node --check boot.js && node --check version.js && node --check game.js && node --check lighting.js && node --check weather.js && node --check audio.js && node --check assets/audio-bank.js && node --check server.js && node --check boss.js && node --check pixel-art.js && node --check arsenal.js && node --check town.js && node --check town-art.js && node --check town-lights.js && node --check art-catalog.js && node --check art-workspace.js && node --check art-studio.js && node --check frame-stats.js && node --check burning.js && node --check dev-horde.js && node --check coop.js && node --check network.js && node --check server/simulation.cjs && node --check server/headless.js && node --check server/world.js && node --check server/room-worker.cjs && node --check movement.js && node --check prediction.js && node --check player-skins.js && node --check squad-ui.js && node --check interpolation.js && node --check server/snapshot-stream.cjs",
     "release": "python3 tools/package_release.py",
-    "test": "node tests/multiplayer.cjs && node tests/lobby.cjs && node tests/prediction.cjs && node tests/squad.cjs && node tests/appearance.cjs && node tests/rescue.cjs && node tests/loading.cjs"
+    "test": "node tests/multiplayer.cjs && node tests/lobby.cjs && node tests/prediction.cjs && node tests/squad.cjs && node tests/appearance.cjs && node tests/rescue.cjs && node tests/loading.cjs && node tests/network-smoothing.cjs"
   },
   "dependencies": {
     "ws": "8.22.0"
