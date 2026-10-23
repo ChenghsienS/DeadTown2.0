@@ -3,7 +3,7 @@ const {parentPort,workerData}=require('node:worker_threads');
 const {performance}=require('node:perf_hooks');
 const {Simulation}=require('./simulation.cjs');
 const sim=new Simulation(workerData.members,workerData.seed);
-parentPort.on('message',m=>{if(m.type==='input')sim.input(m.id,m.input);else if(m.type==='disconnect')sim.disconnect(m.id);});
+parentPort.on('message',m=>{if(m.type==='input')sim.input(m.id,m.input);else if(m.type==='disconnect')sim.disconnect(m.id);else if(m.type==='identity')sim.identity(m.id,m);});
 parentPort.postMessage({type:'started',snapshot:sim.snapshot()});
 let before=performance.now(),accumulator=0,ticks=0,ended=false;
 let period=before,stepTimes=[],snapshotMs=0;

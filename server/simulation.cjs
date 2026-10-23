@@ -3,7 +3,7 @@
 // collision, AI, projectiles, fire, drops and bosses are the shared game code.
 const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const root=path.resolve(__dirname,'..');
-const scripts=['version.js','player-skins.js','coop.js','movement.js','crowd.js','visual-effects.js','server/headless.js','town.js','weather.js','boss.js','arsenal.js','burning.js','game.js','server/world.js'];
+const scripts=['version.js','player-skins.js','account-rules.js','coop.js','movement.js','crowd.js','visual-effects.js','server/headless.js','town.js','weather.js','boss.js','arsenal.js','burning.js','game.js','server/world.js'];
 const source=new Map(scripts.map(file=>[file,fs.readFileSync(path.join(root,file),'utf8')]));
 class Simulation {
   constructor(members,seed){
@@ -19,6 +19,7 @@ class Simulation {
   }
   input(id,input){this.api.input(id,input);}
   disconnect(id){this.api.disconnect(id);}
+  identity(id,identity){this.api.identity(id,identity);}
   step(dt=1/30){this.api.step(dt);}
   snapshot(){return this.api.snapshot();}
   frame(stats){return this.api.frame(stats);}
