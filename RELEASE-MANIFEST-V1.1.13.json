@@ -1,0 +1,12 @@
+{
+  "version": "1.1.13",
+  "baseVersion": "1.1.12",
+  "checks": {
+    "standard": 132,
+    "native": 17,
+    "browser": 11
+  },
+  "checksTotal": 160,
+  "browser": "Chromium 153.0.8010.0",
+  "deployed": false
+}

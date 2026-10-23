@@ -1,18 +1,18 @@
-# V1.1.11 → V1.1.12 更新
+# V1.1.12 → V1.1.13 更新
 
-本版同时修改共享玩法、浏览器显示和多人服务器。前后端必须一起更新；下载不会自动更新网站。
+本版加入注册、登录、独立头像、账号排行榜，允许队友在倒地救援圈内移动。前端、服务器与新增文件需一起更新。
 
-## 上传 GitHub
+## 1. 上传 GitHub
 
-打开 https://github.com/ChenghsienS/DeadTown2.0 ，点击 Add file → Upload files。
+打开 https://github.com/ChenghsienS/DeadTown2.0 。从 V1.1.12 升级使用 `DeadTown-V1.1.13-update.zip`；清空仓库后或旧版本不明时，用 `DeadTown-V1.1.13.zip` 完整版。
 
-解压 `DeadTown-V1.1.12-update.zip`，进入 `DeadTown` 文件夹，把其中的文件和文件夹上传到仓库根目录并提交。无需清空仓库；不要上传 ZIP 本身，也不要多套一层 DeadTown 文件夹。更新包只适用于 V1.1.11。若不确定当前版本，使用完整包 `DeadTown-V1.1.12.zip`。
+解压并进入 `DeadTown` 文件夹，把里面的文件与文件夹上传到仓库根目录并提交。不要上传 ZIP 本身或再套一层 `DeadTown`。不需要清空仓库。
 
-务必一起上传新增 `crowd.js`、`visual-effects.js`、`snapshot-codec.js`，以及更新包里的 `server/`、`tests/`、页面、版本与其他脚本。完整包保留上一版作者头像和音效，不需要另外下载素材。
+新增 `account-rules.js`、`account-portraits.js`、`accounts.js`、`accounts.css`、`rankings.js`、`server/accounts.cjs` 必须一起上传。没有新增生产依赖，不需要 npm install 或 Supabase SQL 配置。
 
-## VPS 更新
+## 2. 更新 VPS
 
-先等当前对局结束；重启会结束正在进行的房间。在 Hostinger VPS Web console 执行：
+先等对局结束；重启会结束正在进行的房间。在 Hostinger VPS 终端执行：
 
 ```bash
 cd /opt/deadtown &&
@@ -21,24 +21,36 @@ npm run check &&
 systemctl restart deadtown
 ```
 
-如果拉取或检查失败，后续重启不会执行；保留错误文字再排查。没有新增服务器 npm 依赖。
-
-完成后单独执行：
+拉取或检查报错时，后续重启不会执行。保留完整报错再排查。
 
 ```bash
 systemctl is-active deadtown
 curl -fsS http://127.0.0.1:3000/health
+curl -fsS http://127.0.0.1:3000/api/account
+curl -fsS http://127.0.0.1:3000/api/leaderboard
 ```
 
-应显示 `active`，健康接口 `version` 为 `1.1.12`。所有玩家按 **Ctrl + F5**，主页也应为 V1.1.12。Nginx、域名、证书、端口和 systemd 配置不用改。
+应看到 active、版本 1.1.13、`{"user":null}` 和包含 rows 的榜单响应。首次使用没有新成绩时，rows 是空数组。
 
-## 上线后验证
+## 3. 检查公网账号接口
 
-1. 单人和多人分别走动、持续开火、翻滚和撞墙，检查动作与碰撞。
-2. 多人中用原先延迟较高的客机走直线、转向和停止，观察回拉；测试聊天、倒地救援、死亡动画和再次开局。
-3. 展开右上角“性能详情”。记录 Ping、抖动/缓冲、FPS/1% LOW、服务器每步耗时和更新频率，尤其是停顿发生时。
-4. 短时间网络波动应继续响应本地移动；超过 1.2 秒没有可用状态则停止预测并等待恢复。真正断开连接后仍需重新进入大厅，不支持恢复原对局。
+打开 HTTPS 游戏网址，按 Ctrl + F5。主页显示 V1.1.13 后注册账号，再刷新确认仍然登录。
 
-本版针对同步积压、重复传输和计算开销。网络地理距离没有改变，不保证公网 Ping 下降到某个数字。此次未在你的 VPS 或真实浏览器中实测，测试范围与压力数据见 `verification/PERFORMANCE-V1.1.12.md`。
+如果接口返回 404、405、提示来源不匹配或要求 HTTPS，检查 Nginx：`/api/` 必须转发到 `http://127.0.0.1:3000`，并设置 Host、X-Real-IP 与 X-Forwarded-Proto。完整片段见 `ACCOUNT-SYSTEM.md`。已有代理满足这些条件时，不必更改 Nginx。
 
-常规自动化验证：`npm test`（Node.js 22+）。原生 Canvas 专项测试只用于开发验证，不需要在 VPS 安装其可选依赖。
+注册和登录通过网页完成，不需要把密码输入终端。
+
+## 4. 保存账号数据
+
+默认数据位于**运行 Node 的系统用户主目录下 `.local/share/deadtown/accounts.json`**。root 服务对应 `/root/.local/share/deadtown/accounts.json`；设置了 DEADTOWN_DATA_DIR 时，以该目录为准。
+
+此目录在 GitHub 工作目录外，后续游戏更新不会清空账号。请私下备份；换 VPS、服务用户或数据目录时需要一起迁移，不能上传 GitHub。
+
+## 5. 试玩检查
+
+1. 选择头像注册；刷新、重新登录后头像和游戏名保持。
+2. 两个账号进入房间，检查房间成员、局内和结算排行头像。
+3. 一人倒地，队友在提示圈内移动 5 秒，进度应持续且复活恢复 20% 血量；离开范围会重新计时。
+4. 单人结束后检查账号榜；游客提示登录/注册，可继续游玩但不进全球榜。
+
+旧 Supabase 榜单位于历史榜，不按同名自动归属新账号。多人局内积分规则不变。详细规则见 ACCOUNT-SYSTEM.md。

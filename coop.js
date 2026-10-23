@@ -56,19 +56,9 @@ const Coop = (() => {
     state.running=false;state.gameOver=true;Arsenal.stop();return true;
   }
   function finishDeath(p){markDead(p);endIfNoRescuer();}
-  function canRescue(p,dt){
-    if(p.dashTime>0||p.rocketJumpTime>0)return false;
-    const keys=p.input?.keys||new Set();
-    const movingX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
-    const movingY=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
-    // Damage and passive displacement do not cancel help. Voluntary movement
-    // still requires standing still; range and line of sight are checked below.
-    if((p.hurtTimer>0||p.knockbackTime>0)&&!movingX&&!movingY)return true;
-    return !p.knockbackTime&&Math.hypot(p.x-(p.rescueX??p.x),p.y-(p.rescueY??p.y))<=Math.max(.12,dt*4);
-  }
   function updateRescue(dt){
     if(!server||state.gameOver||endIfNoRescuer())return;
-    const helpers=living().filter(p=>canRescue(p,dt));
+    const helpers=living();
     const occupied=new Set();
     for(const p of survivors().filter(p=>p.downed)){
       p.downRemaining=Math.max(0,p.downRemaining-dt);
@@ -82,7 +72,6 @@ const Coop = (() => {
         p.input={keys:new Set(),fire:false,actions:[]};emit('playerRevive',{id:p.id,name:p.name,helperId:helper.id});
       }else if(p.downRemaining<=1e-8)finishDeath(p);
     }
-    for(const p of all()){p.rescueX=p.x;p.rescueY=p.y;}
   }
   function award(score,owner){state.score+=score;state.kills++;if(server){const p=roster.find(p=>p.id===owner);if(p){p.score=(p.score||0)+score;p.kills=(p.kills||0)+1;}}}
   function aim(o=player,cam=camera()){

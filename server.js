@@ -4,6 +4,8 @@ const {randomBytes,scryptSync,timingSafeEqual}=require('node:crypto');
 const {Worker}=require('node:worker_threads');
 const {WebSocketServer,WebSocket}=require('./server/vendor/ws');
 const PlayerSkins=require('./player-skins');
+const AccountRules=require('./account-rules');
+const {AccountStore,createAccountAPI,cookieToken}=require('./server/accounts.cjs');
 const {SnapshotStream}=require('./server/snapshot-stream.cjs');
 const version=require('./package.json').version;
 const root=__dirname,KEYS=new Set(['w','a','s','d','arrowup','arrowleft','arrowdown','arrowright','shift']);
@@ -12,9 +14,22 @@ const publicFiles=new Set(['index.html',...fs.readdirSync(root).filter(f=>/\.(js
 function clean(value,max){return typeof value==='string'?value.replace(/[\u0000-\u001f\u007f]/g,'').trim().slice(0,max):'';}
 function createHost(options={}){
   const rooms=new Map(),clients=new Map();let closed=false;
+  const accounts=new AccountStore({directory:options.dataDir});
+  function identity(c){return {name:c.name,accountId:c.user?.id||null,avatarId:c.user?.avatarId||'guest'};}
+  function updateIdentity(c,user){c.user=user;c.name=user.displayName;send(c,{type:'identity',self:identity(c)});const r=rooms.get(c.room);if(r){r.worker?.postMessage({type:'identity',id:c.id,...identity(c)});if(r.result?.ranking)for(const p of r.result.ranking)if(p.id===c.id){p.name=user.displayName;p.avatarId=user.avatarId;p.accountId=user.id;}}return r;}
+  const accountAPI=createAccountAPI(accounts,{signedIn(user,token,req){
+    const binding=req.headers['x-deadtown-connection'];if(typeof binding!=='string'||binding.length!==48)return;
+    const c=[...clients.values()].find(c=>c.binding===binding&&c.hello);if(!c)return;c.sessionToken=token;const r=updateIdentity(c,user);if(r)announceRoom(r);
+  },changed(user){
+    const changedRooms=new Set();
+    for(const c of clients.values())if(c.user?.id===user.id){const r=updateIdentity(c,user);if(r)changedRooms.add(r);}
+    for(const r of changedRooms)announceRoom(r);
+  },signedOut(token){for(const c of clients.values())if(c.sessionToken===token)c.ws.close(1008,'Session ended');}});
   const maxRooms=Math.max(1,Math.min(12,Number(options.maxRooms??process.env.MAX_ROOMS)||4));
   const hostName=clean(options.name??process.env.SERVER_NAME,40)||'Dead Town';
   const server=http.createServer((req,res)=>{
+    let url;try{url=new URL(req.url,'http://localhost');}catch{res.writeHead(400);return res.end();}
+    if(url.pathname.startsWith('/api/')){accountAPI(req,res,url);return;}
     if(!['GET','HEAD'].includes(req.method)){res.writeHead(405,{Allow:'GET, HEAD'});return res.end();}
     let name;try{name=decodeURIComponent(new URL(req.url,'http://localhost').pathname).slice(1)||'index.html';}catch{res.writeHead(400);return res.end();}
     if(name==='health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(JSON.stringify({ok:true,version,rooms:rooms.size,players:clients.size}));}
@@ -26,7 +41,7 @@ function createHost(options={}){
   function send(c,data){if(c.ws.readyState===WebSocket.OPEN)c.ws.send(JSON.stringify(data));}
   function error(c,code){send(c,{type:'error',code});}
   const publicRoom=r=>({id:r.id,name:r.name,capacity:r.capacity,count:r.members.size,locked:!!r.password,status:r.status,hostId:r.hostId});
-  function roomInfo(r){return {...publicRoom(r),members:[...r.members.values()].map(c=>({id:c.id,name:c.name,ready:c.ready,...c.appearance})),result:r.result||null,startsInMs:r.countdownEnd?Math.max(0,r.countdownEnd-Date.now()):0};}
+  function roomInfo(r){return {...publicRoom(r),members:[...r.members.values()].map(c=>({id:c.id,...identity(c),ready:c.ready,...c.appearance})),result:r.result||null,startsInMs:r.countdownEnd?Math.max(0,r.countdownEnd-Date.now()):0};}
   function announceRoom(r){for(const c of r.members.values())send(c,{type:'room',room:roomInfo(r)});}
   function lobby(c){send(c,{type:'lobby',name:hostName,rooms:[...rooms.values()].map(publicRoom)});}
   function announceLobby(){for(const c of clients.values())if(c.hello&&!c.room)lobby(c);}
@@ -54,7 +69,7 @@ function createHost(options={}){
   function start(r){
     if(r.status!=='waiting'||!r.members.size)return;cancelCountdown(r);
     r.status='starting';r.result=null;announceRoom(r);announceLobby();
-    const worker=r.worker=new Worker(path.join(root,'server/room-worker.cjs'),{workerData:{members:[...r.members.values()].map(c=>({id:c.id,name:c.name,...c.appearance})),seed:randomBytes(4).readUInt32LE()}});
+    const worker=r.worker=new Worker(path.join(root,'server/room-worker.cjs'),{workerData:{members:[...r.members.values()].map(c=>({id:c.id,...identity(c),...c.appearance})),seed:randomBytes(4).readUInt32LE()}});
     let failed=false;
     function failure(err){if(failed||r.worker!==worker||!rooms.has(r.id))return;failed=true;console.error('Room '+r.id+':',err);worker.terminate();r.worker=null;r.status='waiting';for(const c of r.members.values()){c.ready=false;error(c,'room_failed');}announceRoom(r);announceLobby();}
     worker.on('error',failure);worker.on('exit',code=>{if(code!==0&&r.worker===worker)failure('Worker exited '+code);});
@@ -69,8 +84,8 @@ function createHost(options={}){
     if(!m||typeof m!=='object'||typeof m.type!=='string')return error(c,'bad_message');
     if(m.type==='hello'){
       if(m.version!==version)return error(c,'version');
-      if(c.hello)return;const name=clean(m.name,18);if(!name)return error(c,'name');
-      c.hello=true;c.name=name;c.appearance=PlayerSkins.normalize(m.appearance);if(m.snapshotCodec===1)c.stream.enableCodec();send(c,{type:'welcome',id:c.id,version,name:hostName,maxRooms});return lobby(c);
+      if(c.hello)return;c.user=c.sessionToken?accounts.session(c.sessionToken):null;const name=c.user?.displayName||AccountRules.guestName(m.name);if(!name)return error(c,'name');
+      c.hello=true;c.name=name;c.appearance=PlayerSkins.normalize(m.appearance);if(m.snapshotCodec===1)c.stream.enableCodec();send(c,{type:'welcome',id:c.id,version,name:hostName,maxRooms,self:identity(c),binding:c.binding});return lobby(c);
     }
     if(!c.hello)return error(c,'hello_first');
     if(m.type==='ping')return send(c,{type:'pong',at:m.at});
@@ -128,20 +143,23 @@ function createHost(options={}){
   }
   server.on('upgrade',(req,socket,head)=>{
     const ip=req.socket.remoteAddress;
-    let validOrigin=true;try{if(req.headers.origin)validOrigin=['http:','https:'].includes(new URL(req.headers.origin).protocol)&&new URL(req.headers.origin).host===req.headers.host;}catch{validOrigin=false;}
+    // TLS may terminate at the existing reverse proxy. Validate the WS host as
+    // before; account HTTP mutations separately enforce HTTPS and its scheme.
+    let validOrigin=req.headers['sec-fetch-site']!=='cross-site';
+    try{if(req.headers.origin){const origin=new URL(req.headers.origin);validOrigin=validOrigin&&['http:','https:'].includes(origin.protocol)&&origin.host===req.headers.host;}}catch{validOrigin=false;}
     if(req.url!=='/ws'||!validOrigin||clients.size>=64||[...clients.values()].filter(c=>c.ip===ip).length>=32){socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');return socket.destroy();}
     wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));
   });
   wss.on('connection',(ws,req)=>{
-    const c={ws,id:randomBytes(8).toString('hex'),ip:req.socket.remoteAddress,hello:false,room:null,name:'',ready:false,alive:true,sequence:-1,tokens:180,tokenTime:Date.now(),lastJoin:0,appearance:PlayerSkins.normalize(),chatTokens:4,chatAt:Date.now()};c.stream=new SnapshotStream(ws);clients.set(c.id,c);
+    const c={ws,binding:randomBytes(24).toString('hex'),sessionToken:cookieToken(req),user:null,id:randomBytes(8).toString('hex'),ip:req.socket.remoteAddress,hello:false,room:null,name:'',ready:false,alive:true,sequence:-1,tokens:180,tokenTime:Date.now(),lastJoin:0,appearance:PlayerSkins.normalize(),chatTokens:4,chatAt:Date.now()};c.stream=new SnapshotStream(ws);clients.set(c.id,c);
     ws.on('pong',()=>c.alive=true);
     ws.on('message',data=>{try{const now=Date.now();c.tokens=Math.min(180,c.tokens+(now-c.tokenTime)*.09)-1;c.tokenTime=now;if(c.tokens<0)return ws.close(1008,'Rate limit');dispatch(c,JSON.parse(data));}catch{error(c,'bad_message');}});
     ws.on('error',()=>{});ws.on('close',()=>{clients.delete(c.id);leave(c,false);});
     const timer=setTimeout(()=>{if(!c.hello)ws.close(1008,'Hello timeout');},10000);timer.unref();ws.on('close',()=>clearTimeout(timer));
   });
-  const heartbeat=setInterval(()=>{for(const c of clients.values()){if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.ws.ping();}},15000);heartbeat.unref();
-  async function close(){if(closed)return;closed=true;clearInterval(heartbeat);for(const r of rooms.values()){cancelCountdown(r);const w=r.worker;r.worker=null;await w?.terminate();}rooms.clear();for(const c of clients.values())c.ws.terminate();await new Promise(resolve=>wss.close(resolve));await new Promise(resolve=>server.close(resolve));}
-  return {server,rooms,clients,close,listen(port=Number(process.env.PORT)||8080,host=process.env.HOST||'0.0.0.0'){return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>{server.removeListener('error',reject);resolve(server.address());});});}};
+  const heartbeat=setInterval(()=>{for(const c of clients.values()){if(c.user&&!accounts.session(c.sessionToken)){c.ws.close(1008,'Session expired');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.ws.ping();}},15000);heartbeat.unref();
+  async function close(){if(closed)return;closed=true;clearInterval(heartbeat);for(const r of rooms.values()){cancelCountdown(r);const w=r.worker;r.worker=null;await w?.terminate();}rooms.clear();for(const c of clients.values())c.ws.terminate();await new Promise(resolve=>wss.close(resolve));await new Promise(resolve=>server.close(resolve));await accounts.close();}
+  return {server,rooms,clients,accounts,close,listen(port=Number(process.env.PORT)||8080,host=process.env.HOST||'0.0.0.0'){return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>{server.removeListener('error',reject);resolve(server.address());});});}};
 }
 if(require.main===module){
   const app=createHost();app.listen().then(address=>{

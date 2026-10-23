@@ -19,173 +19,18 @@ function isDefaultPlayerName(name){
   return String(name||'').trim().toLowerCase()==='player';
 }
 
-// ── Leaderboard ──
-const SUPABASE_URL='https://yluretxiufiiwyggpuvo.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY='sb_publishable_LU-09j2m_Qa6c07nCuGyBQ_XWbcCBE6';
-const LEADERBOARD_LIMIT=10,LEADERBOARD_TIMEOUT=8000;
-const LEADERBOARD_PENDING_KEY='dead_town_leaderboard_pending_v1:'+SUPABASE_URL;
-const LEADERBOARD_CACHE_KEY='dead_town_leaderboard_cache_v1:'+SUPABASE_URL;
-const leaderboardPending=new Map();
-let leaderboardLoadPromise=null,leaderboardFlushPromise=null,leaderboardSubmitFailure=null;
-let leaderboardPendingSaved=true,leaderboardShowingCache=false;
-Object.assign(T.en,{
-  leaderboardTimeout:'Connection timed out. Please retry.',
-  leaderboardNetwork:'Unable to reach the ranking server. Check your connection and retry.',
-  leaderboardService:'Ranking service is unavailable. Please retry later.',
-  leaderboardPermission:'Ranking access was denied. The project owner needs to check the API key and database permissions.',
-  leaderboardSchema:'The ranking table or fields are unavailable. The project owner needs to check the database.',
-  leaderboardInvalid:'The ranking server returned an invalid response.',
-  leaderboardWrite:'The server did not confirm the score. It is still waiting to upload.',
-  leaderboardPending:'Your score is saved on this device and will retry automatically.',
-  leaderboardUnsaved:'Your score is waiting in this tab. Keep it open: device storage is unavailable.',
-  leaderboardCached:'Previously downloaded results · not updated yet',
-  leaderboardDefaultHint:'Change the default name Player before playing to enter the global rankings.'
-});
-Object.assign(T.zh,{
-  leaderboardTimeout:'排行榜连接超时，请重试。',
-  leaderboardNetwork:'无法连接排行榜服务器，请检查网络后重试。',
-  leaderboardService:'排行榜服务暂时不可用，请稍后重试。',
-  leaderboardPermission:'排行榜访问被拒绝，需要作者检查 API 配置与数据库权限。',
-  leaderboardSchema:'排行榜数据表或字段不可用，需要作者检查数据库。',
-  leaderboardInvalid:'排行榜服务器返回了无效数据。',
-  leaderboardWrite:'服务器尚未确认成绩，成绩仍在等待上传。',
-  leaderboardPending:'成绩已保存在此设备，连接恢复后会自动补传。',
-  leaderboardUnsaved:'成绩正在此页面等待上传；设备存储不可用，请保持页面打开。',
-  leaderboardCached:'上次下载的榜单 · 尚未刷新',
-  leaderboardDefaultHint:'游玩前修改默认名字 Player，即可参加全球排行。'
-});
+// ── Account-bound rankings (browser only) ──
 function escapeHtml(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function leaderboardReadJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback;}catch{return fallback;}}
-function leaderboardError(kind,status=0,code=''){const error=new Error(kind);return Object.assign(error,{kind,status,code});}
-function leaderboardErrorText(error){return T[lang][error?.kind]||T[lang].leaderboardError;}
-function persistPendingScores(){
-  try{localStorage.setItem(LEADERBOARD_PENDING_KEY,JSON.stringify([...leaderboardPending].map(([name,score])=>({name,score}))));leaderboardPendingSaved=true;}
-  catch{leaderboardPendingSaved=false;}
-}
-function savePersonalBest(){try{localStorage.setItem('dead_town_supply_v2_best',String(state.best));}catch{/* Ranking queue reports its own persistence state. */}}
-function normalizeLeaderboardRows(rows){
-  if(!Array.isArray(rows))throw leaderboardError('leaderboardInvalid');
-  return rows.filter(r=>r&&typeof r.player_name==='string'&&r.player_name.trim()&&Number.isSafeInteger(Number(r.best_score))&&Number(r.best_score)>=0)
-    .map(r=>({player_name:r.player_name,best_score:Number(r.best_score),updated_at:typeof r.updated_at==='string'?r.updated_at:''}));
-}
-function restoreLeaderboardStorage(){
-  const pending=leaderboardReadJSON(LEADERBOARD_PENDING_KEY,[]);
-  if(Array.isArray(pending))for(const p of pending){
-    if(!p||typeof p.name!=='string'||!p.name.trim()||p.name.length>18||isDefaultPlayerName(p.name)||!Number.isSafeInteger(p.score)||p.score<0)continue;
-    leaderboardPending.set(p.name,Math.max(leaderboardPending.get(p.name)||0,p.score));
-  }
-  const cached=leaderboardReadJSON(LEADERBOARD_CACHE_KEY,null);
-  if(cached?.rows)try{state.leaderboard=normalizeLeaderboardRows(cached.rows).slice(0,LEADERBOARD_LIMIT);state.leaderboardLoaded=true;leaderboardShowingCache=true;}catch{/* Ignore damaged cached data. */}
-}
-function leaderboardCardMarkup(){
-  const t=T[lang],busy=state.leaderboardLoading||state.leaderboardSyncing;
-  const error=state.leaderboardFailure?leaderboardErrorText(state.leaderboardFailure):state.leaderboardError;
-  const message=state.leaderboardLoading&&!state.leaderboardLoaded?t.leaderboardLoading:error||t.leaderboardEmpty;
-  const body=state.leaderboard.length?`<ol class="leaderboardList">${state.leaderboard.map((row,i)=>`<li class="leaderboardRow ${row.player_name===state.playerName?'active':''}"><span class="rank">${String(i+1).padStart(2,'0')}</span><span class="leaderName">${escapeHtml(row.player_name||'Player')}${row.player_name===state.playerName?`<span class="youTag">${t.youTag}</span>`:''}</span><span class="leaderScore">${Math.floor(Number(row.best_score)||0)}</span></li>`).join('')}</ol>`:`<div class="emptyBoard"><span class="signalGlyph" aria-hidden="true">· · ·</span><p>${escapeHtml(message)}</p><p>${lang==='zh'?'本地游玩始终可用':'Local play is always available'}</p></div>`;
-  const notes=[];
-  if(leaderboardShowingCache)notes.push(t.leaderboardCached);
-  if(error&&state.leaderboard.length)notes.push(error);
-  if(leaderboardSubmitFailure)notes.push(leaderboardErrorText(leaderboardSubmitFailure));
-  if(state.leaderboardSyncing)notes.push(t.leaderboardSyncing);
-  if(leaderboardPending.size)notes.push(leaderboardPendingSaved?t.leaderboardPending:t.leaderboardUnsaved);
-  if(isDefaultPlayerName(state.playerName))notes.push(t.leaderboardDefaultHint);
-  return `<section id="leaderboardPanelInner"><div class="leaderboardHead"><h3>${t.leaderboardTitle}</h3><button id="refreshLeaderboardBtn" class="quiet" ${busy?'disabled aria-busy="true"':''}>${state.leaderboardLoading?(lang==='zh'?'刷新中…':'Refreshing…'):t.leaderboardRefresh}</button></div>${body}${notes.map(note=>`<p class="boardNote" role="status">${escapeHtml(note)}</p>`).join('')}</section>`;
-}
-function bindLeaderboardRefreshButton(){const button=$('refreshLeaderboardBtn');if(button)button.onclick=()=>{if(!state.leaderboardLoading&&!state.leaderboardSyncing)retryLeaderboard();};}
-function refreshLeaderboardPanels(){document.querySelectorAll('[data-leaderboard-panel]').forEach(panel=>{panel.innerHTML=leaderboardCardMarkup();});bindLeaderboardRefreshButton();}
-async function supabaseRequest(path,options={}){
-  const controller=new AbortController();let timer;
-  const request=(async()=>{
-    let response;
-    try{response=await fetch(`${SUPABASE_URL}/rest/v1/${path}`,{
-      method:options.method||'GET',signal:controller.signal,cache:'no-store',credentials:'omit',
-      headers:{apikey:SUPABASE_PUBLISHABLE_KEY,'Content-Type':'application/json',...(options.headers||{})},
-      body:options.body?JSON.stringify(options.body):undefined
-    });}catch(error){throw leaderboardError(error?.name==='AbortError'?'leaderboardTimeout':'leaderboardNetwork');}
-    if(!response.ok){
-      let details={};try{details=JSON.parse(await response.text());}catch{/* Gateways may return plain text. */}
-      const status=response.status,code=details.code||'';
-      const kind=status===401||status===403||code==='42501'?'leaderboardPermission':status===404||['42P01','42703','PGRST204','PGRST205'].includes(code)?'leaderboardSchema':status===429||status>=500?'leaderboardService':'leaderboardWrite';
-      throw leaderboardError(kind,status,code);
-    }
-    if(response.status===204)return null;
-    try{return await response.json();}catch{throw leaderboardError('leaderboardInvalid');}
-  })();
-  try{return await Promise.race([request,new Promise((_,reject)=>{timer=setTimeout(()=>{reject(leaderboardError('leaderboardTimeout'));controller.abort();},LEADERBOARD_TIMEOUT);})]);}
-  finally{clearTimeout(timer);}
-}
-function rerenderMenusIfNeeded(){if(!state.loading&&(state.overlayScreen==='main'||state.overlayScreen==='gameover'))refreshLeaderboardPanels();}
-function loadLeaderboard(force=false){
-  // Refresh, menu entry and reconnect share one in-flight request.
-  if(leaderboardLoadPromise)return leaderboardLoadPromise;
-  state.leaderboardLoading=true;state.leaderboardError='';state.leaderboardFailure=null;rerenderMenusIfNeeded();
-  leaderboardLoadPromise=(async()=>{
-    try{
-      const rows=normalizeLeaderboardRows(await supabaseRequest(`leaderboard?select=player_name,best_score,updated_at&order=best_score.desc,updated_at.asc&limit=${LEADERBOARD_LIMIT}`));
-      state.leaderboard=rows.slice(0,LEADERBOARD_LIMIT);state.leaderboardLoaded=true;leaderboardShowingCache=false;
-      try{localStorage.setItem(LEADERBOARD_CACHE_KEY,JSON.stringify({rows:state.leaderboard}));}catch{/* Online results remain usable. */}
-      return true;
-    }catch(error){state.leaderboardFailure=error;state.leaderboardError=leaderboardErrorText(error);leaderboardShowingCache=state.leaderboardLoaded;return false;}
-    finally{state.leaderboardLoading=false;rerenderMenusIfNeeded();}
-  })().finally(()=>{leaderboardLoadPromise=null;});
-  return leaderboardLoadPromise;
-}
-function leaderboardNameFilter(name){return 'player_name=eq.'+encodeURIComponent('"'+name.replace(/\\/g,'\\\\').replace(/"/g,'\\"')+'"');}
-async function fetchPlayerBest(name){
-  if(!name||isDefaultPlayerName(name))return null;
-  const rows=normalizeLeaderboardRows(await supabaseRequest(`leaderboard?select=player_name,best_score&${leaderboardNameFilter(name)}&limit=1`));
-  return rows.find(row=>row.player_name===name)||null;
-}
-async function syncPlayerBest(){
-  const name=state.playerName;if(!name||isDefaultPlayerName(name))return;
-  try{const row=await fetchPlayerBest(name);if(row&&state.playerName===name){state.best=Math.max(Number(state.best)||0,row.best_score);savePersonalBest();updateHUD();rerenderMenusIfNeeded();}}catch{/* Main ranking panel reports connection failures. */}
-}
-async function writeLeaderboardScore(name,score){
-  for(let attempt=0;attempt<2;attempt++){
-    const row=await fetchPlayerBest(name);if(row&&row.best_score>=score)return row;
-    let written;
-    try{
-      const common={headers:{Prefer:'return=representation'},body:{best_score:score,updated_at:new Date().toISOString()}};
-      // The score predicate prevents a slower request from overwriting a higher score.
-      written=await supabaseRequest(row?`leaderboard?${leaderboardNameFilter(name)}&best_score=lt.${score}`:'leaderboard',
-        row?{...common,method:'PATCH'}:{...common,method:'POST',body:{...common.body,player_name:name}});
-    }catch(error){if(attempt===0&&error.status===409)continue;throw error;}
-    const confirmed=(Array.isArray(written)?normalizeLeaderboardRows(written).find(r=>r.player_name===name):null)||await fetchPlayerBest(name);
-    if(confirmed&&confirmed.best_score>=score)return confirmed;
-    throw leaderboardError('leaderboardWrite');
-  }
-  throw leaderboardError('leaderboardWrite');
-}
-function flushLeaderboardScores(){
-  if(leaderboardFlushPromise)return leaderboardFlushPromise;
-  if(!leaderboardPending.size)return Promise.resolve(true);
-  state.leaderboardSyncing=true;leaderboardSubmitFailure=null;rerenderMenusIfNeeded();
-  leaderboardFlushPromise=(async()=>{
-    try{
-      while(leaderboardPending.size){
-        const [name,score]=leaderboardPending.entries().next().value;
-        const row=await writeLeaderboardScore(name,score);
-        if(leaderboardPending.get(name)<=score)leaderboardPending.delete(name);
-        persistPendingScores();
-        if(state.playerName===name){state.best=Math.max(Number(state.best)||0,row.best_score);savePersonalBest();updateHUD();}
-      }
-      return true;
-    }catch(error){leaderboardSubmitFailure=error;return false;}
-  })().finally(()=>{
-    state.leaderboardSyncing=false;leaderboardFlushPromise=null;rerenderMenusIfNeeded();
-    if(!leaderboardSubmitFailure){loadLeaderboard(true);if(leaderboardPending.size)setTimeout(flushLeaderboardScores,0);}
-  });
-  return leaderboardFlushPromise;
-}
-function submitLeaderboardScore(score){
-  const name=state.playerName,value=Math.floor(Number(score));
-  if(!name||isDefaultPlayerName(name)||!Number.isSafeInteger(value)||value<0)return Promise.resolve(false);
-  leaderboardPending.set(name,Math.max(leaderboardPending.get(name)||0,value));persistPendingScores();
-  return flushLeaderboardScores();
-}
-async function retryLeaderboard(){await flushLeaderboardScores();return loadLeaderboard(true);}
-addEventListener('online',()=>retryLeaderboard());
-setInterval(()=>{if(!document.hidden&&(!state.running||state.gameOver)&&(leaderboardPending.size||state.leaderboardError))retryLeaderboard();},30000);
+function savePersonalBest(){try{localStorage.setItem(Accounts.bestKey(),String(state.best));}catch{}}
+function restoreLeaderboardStorage(){Rankings.restore();}
+function leaderboardCardMarkup(){return Rankings.markup();}
+function bindLeaderboardRefreshButton(){Rankings.bind();}
+function refreshLeaderboardPanels(){Rankings.refreshPanels();}
+function loadLeaderboard(){return Rankings.load();}
+function syncPlayerBest(){return Accounts.refresh();}
+function flushLeaderboardScores(){return Rankings.flush();}
+function submitLeaderboardScore(score){return Rankings.submit(score);}
+function retryLeaderboard(){return Rankings.retry();}
 
 function sanitizeKeybind(value){
   const clean=String(value||'').trim().toUpperCase();
@@ -301,20 +146,16 @@ function bindMenuButtons(){
   const auto=$('devStormAuto');if(auto&&!auto.dataset.bound){auto.dataset.bound='1';auto.checked=Weather.automatic;auto.onchange=()=>Weather.setAutomatic(auto.checked);}
   for(const [id,fn] of setup){const el=$(id); if(el && !el.dataset.devBound){el.dataset.devBound='1'; el.addEventListener('click',fn);}}
 }
-function startGameFromMenu(){ Object.assign(player,PlayerSkins.load());resetGame(); }
+function startGameFromMenu(){ Object.assign(player,PlayerSkins.load());resetGame();Rankings.begin(); }
 function showDefaultNameStartPrompt(){
-  state.overlayScreen='default-name-warning';
-  const t=T[lang];
-  showMenu('subCard',`${menuHeader(t.nameLabel)}<div class="screenBody"><div class="noticeIcon" aria-hidden="true">!</div><h2>${t.defaultNameTitle}</h2><p>${t.defaultNameNotice}</p><p class="warningName">${t.nameLabel} / <strong>${escapeHtml(state.playerName)}</strong></p><div class="controls"><button class="primary" id="renameDefaultNameBtn">${t.defaultNameRename}</button><button id="continueDefaultNameBtn">${t.defaultNameContinue}</button><button class="quiet" id="backDefaultNameBtn">${t.defaultNameBack}</button></div></div>${menuFooter()}`);
-  $('continueDefaultNameBtn').onclick=startGameFromMenu;
-  $('renameDefaultNameBtn').onclick=promptPlayerName;
-  $('backDefaultNameBtn').onclick=()=>{state.menuScreen='main';renderMainMenu();};bindMenuButtons();
+  state.overlayScreen='default-name-warning';const zh=lang==='zh';
+  showMenu('subCard',`${menuHeader(zh?'账号与排名':'ACCOUNT & RANKING')}<div class="screenBody"><span class="eyebrow">SURVIVOR ID / GUEST</span><h2>${zh?'登录后获得排名':'Sign in to get ranked'}</h2><p>${zh?'注册或登录账号后，单人模式成绩才会进入全球排行榜。你也可以继续以游客身份游玩。':'Register or sign in to add your solo scores to the global leaderboard. You can also continue as a guest.'}</p><div class="controls"><button class="primary" id="rankLoginBtn">${zh?'登录':'Sign in'}</button><button id="rankRegisterBtn">${zh?'注册账号':'Register'}</button><button id="continueDefaultNameBtn">${zh?'游客游玩，不计排行':'Play as guest · Unranked'}</button><button class="quiet" id="backDefaultNameBtn">${zh?'返回':'Back'}</button></div></div>${menuFooter()}`);
+  $('rankLoginBtn').onclick=()=>Accounts.open('login',startGameFromMenu);$('rankRegisterBtn').onclick=()=>Accounts.open('register',startGameFromMenu);
+  $('continueDefaultNameBtn').onclick=startGameFromMenu;$('backDefaultNameBtn').onclick=()=>{state.menuScreen='main';renderMainMenu();};bindMenuButtons();
 }
-function handleStartAttempt(){
-  if(isDefaultPlayerName(state.playerName)){
-    showDefaultNameStartPrompt();
-    return;
-  }
+async function handleStartAttempt(){
+  if(!Accounts.initialized)await Accounts.refresh();
+  if(!Accounts.user){showDefaultNameStartPrompt();return;}
   startGameFromMenu();
 }
 // Menu chrome shares the generated build version; package.json is the release source.
@@ -330,8 +171,8 @@ function controlGuide(){const zh=lang==='zh';return `<ul class="controlGuide">${
 function renderMainMenu(){
   state.overlayScreen='main';
   const t=T[lang],zh=lang==='zh';
-  showMenu('mainCard',`${menuHeader(zh?'幸存者终端':'SURVIVOR TERMINAL',true)}<div class="mainGrid"><section class="hero"><div class="eyebrow">${zh?'隔离区 / 无尽尸潮':'QUARANTINE ZONE / ENDLESS HORDE'}</div><h1 class="heroTitle">${pixelTitle()}</h1><div class="heroCopy"><p>${t.start1}</p></div><div class="playerStrip"><span class="label">${t.nameLabel}</span><strong>${escapeHtml(state.playerName)}</strong></div><button id="startBtn" class="primary startButton"><span>${t.startBtn}</span><span class="arrow" aria-hidden="true">→</span></button><button id="onlineBtn" class="primary startButton onlineButton"><span>${zh?'多人合作':'Online Co-op'}</span><span>↗</span></button><nav class="menuButtons" aria-label="${zh?'主菜单':'Main menu'}"><button id="renameBtn">${zh?'修改名字':'Change Name'}<span class="buttonIndex" aria-hidden="true">01</span></button><button id="openKeybindMenuBtn">${t.openKeybindMenu}<span class="buttonIndex" aria-hidden="true">02</span></button><button id="devUnlockBtn">${state.devMode?(zh?'开发者 · 已解锁':'Developer · unlocked'):t.devUnlock}<span class="buttonIndex" aria-hidden="true">03</span></button><button id="menuLangBtn">${zh?'中文 / EN':'EN / 中文'}<span class="buttonIndex" aria-hidden="true">04</span></button></nav>${AudioEngine.settingsHTML(lang)}</section><aside class="menuSide"><div class="recordStrip"><span class="label">${zh?'个人纪录':'PERSONAL RECORD'}<br>${t.best}</span><strong id="menuBest">${Math.floor(state.best)}</strong></div>${PlayerSkins.markup(player)}<div id="leaderboardPanel" data-leaderboard-panel="main">${leaderboardCardMarkup()}</div><div class="creatorCard"><img class="creditAvatar" src="assets/author-avatar.png" width="64" height="64" alt="CEDRRRIIICCC"><div><span class="label">${t.createdBy}</span><strong class="creatorName">CEDRRRIIICCC</strong><p class="creatorNote">${zh?'本游戏在 ChatGPT 的协助下完成':'Created with the assistance of ChatGPT'}</p></div></div></aside></div>${menuFooter()}`);
-  AudioEngine.bindSettings();
+  showMenu('mainCard',`${menuHeader(zh?'幸存者终端':'SURVIVOR TERMINAL',true)}<div class="mainGrid"><section class="hero"><div class="eyebrow">${zh?'隔离区 / 无尽尸潮':'QUARANTINE ZONE / ENDLESS HORDE'}</div><h1 class="heroTitle">${pixelTitle()}</h1><div class="heroCopy"><p>${t.start1}</p></div>${Accounts.badge()}<button id="startBtn" class="primary startButton"><span>${t.startBtn}</span><span class="arrow" aria-hidden="true">→</span></button><button id="onlineBtn" class="primary startButton onlineButton"><span>${zh?'多人合作':'Online Co-op'}</span><span>↗</span></button><nav class="menuButtons" aria-label="${zh?'主菜单':'Main menu'}"><button id="renameBtn">${Accounts.user?(zh?'账号资料':'Account Profile'):(zh?'修改名字':'Change Name')}<span class="buttonIndex" aria-hidden="true">01</span></button><button id="openKeybindMenuBtn">${t.openKeybindMenu}<span class="buttonIndex" aria-hidden="true">02</span></button><button id="devUnlockBtn">${state.devMode?(zh?'开发者 · 已解锁':'Developer · unlocked'):t.devUnlock}<span class="buttonIndex" aria-hidden="true">03</span></button><button id="menuLangBtn">${zh?'中文 / EN':'EN / 中文'}<span class="buttonIndex" aria-hidden="true">04</span></button></nav>${AudioEngine.settingsHTML(lang)}</section><aside class="menuSide"><div class="recordStrip"><span class="label">${zh?'个人纪录':'PERSONAL RECORD'}<br>${t.best}</span><strong id="menuBest">${Math.floor(state.best)}</strong></div>${PlayerSkins.markup(player)}<div id="leaderboardPanel" data-leaderboard-panel="main">${leaderboardCardMarkup()}</div><div class="creatorCard"><img class="creditAvatar" src="assets/author-avatar.png" width="64" height="64" alt="CEDRRRIIICCC"><div><span class="label">${t.createdBy}</span><strong class="creatorName">CEDRRRIIICCC</strong><p class="creatorNote">${zh?'本游戏在 ChatGPT 的协助下完成':'Created with the assistance of ChatGPT'}</p></div></div></aside></div>${menuFooter()}`);
+  AudioEngine.bindSettings();Accounts.bind($('overlayCard'));
   PlayerSkins.bind($('overlayCard'),player,a=>{Object.assign(player,a);renderMainMenu();});
   $('onlineBtn').onclick=()=>Net.open();
   $('renameBtn').onclick=promptPlayerName;$('startBtn').onclick=handleStartAttempt;
@@ -354,7 +195,7 @@ function renderGameOverMenu(){
   state.overlayScreen='gameover';const t=T[lang];
   showMenu('reportCard',`${menuHeader(lang==='zh'?'行动记录':'AFTER ACTION REPORT')}<div class="screenBody"><span class="eyebrow">${lang==='zh'?'信号中断':'SIGNAL LOST'}</span><h2 class="deathTitle">${t.dead}</h2><div class="reportColumns"><section><div class="resultsGrid">${[[t.score,Math.floor(state.score)],[t.kills,state.kills],[t.survive,formatTime(state.surviveTime)],[t.best,Math.floor(state.best)]].map(([k,v])=>`<div class="resultStat"><span class="label">${k}</span><strong>${v}</strong></div>`).join('')}</div><div class="controls"><button id="restartBtn" class="primary">${t.restart} →</button><button id="menuBtn">${t.mainMenu}</button></div><p class="boardNote">${escapeHtml(state.playerName)} / ${t.wave} ${state.wave}</p>${PlayerSkins.markup(player)}</section><div id="leaderboardPanel" data-leaderboard-panel="gameover">${leaderboardCardMarkup()}</div></div></div>${menuFooter()}`);
   PlayerSkins.bind($('overlayCard'),player,a=>{Object.assign(player,a);renderGameOverMenu();});
-  $('restartBtn').onclick=startGameFromMenu;$('menuBtn').onclick=goToMainMenu;bindLeaderboardRefreshButton();bindMenuButtons();
+  $('restartBtn').onclick=handleStartAttempt;$('menuBtn').onclick=goToMainMenu;bindLeaderboardRefreshButton();bindMenuButtons();
 }
 function changeLanguage(){lang=lang==='en'?'zh':'en';localStorage.setItem('dead_town_language',lang);applyLang();updateCursorVisibility();}
 function applyLang(){
@@ -388,14 +229,16 @@ function openMenuDialog(options){
 $('dialogOverlay').addEventListener('keydown',e=>{
   if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeMenuDialog();}
   if(e.key==='Tab'){
-    const first=$('dialogInput'),last=$('dialogConfirm');
+    const nodes=[...$('dialogOverlay').querySelectorAll('button:not([disabled]), input:not([disabled]):not([type=hidden]), select, textarea, [tabindex="0"]')];
+    const first=nodes[0],last=nodes[nodes.length-1];if(!first)return;
     if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
     else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
   }
 });
 function promptPlayerName(){
-  openMenuDialog({title:lang==='zh'?'修改名字':'Change Name',label:lang==='zh'?'输入角色名字（最多 18 字）':'Character name (up to 18 characters)',value:state.playerName,maxLength:18,submit(value){
-    const clean=value.trim().slice(0,18);if(!clean)return lang==='zh'?'请输入名字。':'Enter a name.';
+  if(Accounts.user){Accounts.open('profile');return;}
+  openMenuDialog({title:lang==='zh'?'修改名字':'Change Name',label:lang==='zh'?'输入角色名字（最多 20 个字符）':'Character name (up to 20 characters)',value:state.playerName,maxLength:512,submit(value){
+    if(!AccountRules.validName(value))return Accounts.errorText({code:'display_name_rule'});const clean=AccountRules.displayName(value);
     state.playerName=clean;localStorage.setItem('dead_town_player_name',clean);state.overlayScreen='main';applyLang();syncPlayerBest();loadLeaderboard(true);return '';
   }});
 }
@@ -1302,5 +1145,5 @@ function startClient(){
   state.loadProgress=1;state.loadDone=true;state.loading=false;
   updateLoadingUI();updateCursorVisibility();last=performance.now();requestAnimationFrame(loop);
   // Online rankings are optional, and audio is unlocked by the first user gesture.
-  loadLeaderboard();syncPlayerBest();flushLeaderboardScores();
+  loadLeaderboard();Accounts.refresh().then(()=>flushLeaderboardScores());
 }
