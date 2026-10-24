@@ -1,0 +1,138 @@
+{
+  "version": "1.1.14",
+  "baseVersion": "1.1.13",
+  "checks": {
+    "standard": 146,
+    "native": 17,
+    "browserAccounts": 11,
+    "browserProgression": 11
+  },
+  "checksTotal": 185,
+  "browser": "Chromium 153.0.8010.0",
+  "deployed": false,
+  "authorAvatarSha256": "beb66734f83b51b85ff4308b5402cfd812a79877bad5573d7bac6584e8f1f9c2",
+  "originalAssetsUnchanged": true,
+  "changedFilesExcludingManifest": [
+    {
+      "path": "ACCOUNT-SYSTEM.md",
+      "sha256": "6cdc061dd1944aa699d45f9986d7c8b9857505cbb5ef3fdcf8cbc0aa5e0ce6db"
+    },
+    {
+      "path": "MULTIPLAYER-README.md",
+      "sha256": "293f7b8bb856a14b6ba3ad0f42767524d06ae3c5068e0e7da030ca28bd637697"
+    },
+    {
+      "path": "PROGRESSION.md",
+      "sha256": "b7ab78d87cb01aa7e01eb8df9aaf93bce7f539c187320005c4db6b467a14050b"
+    },
+    {
+      "path": "README.md",
+      "sha256": "d14eeb2a692435982ab5c1c4c3ae89fc7fb610f970e066fb5c4812b8a3f2ab28"
+    },
+    {
+      "path": "UPDATE-HOSTINGER.md",
+      "sha256": "eff1aa35f64f62dad90711c519b613e3f8a2793a4b60dcb4c41d562ec2edb444"
+    },
+    {
+      "path": "account-progress.js",
+      "sha256": "d4ae0ab7da3f646bd2b21c7877b31122ef834a1198855b9052b6f6d3d40c961c"
+    },
+    {
+      "path": "accounts.css",
+      "sha256": "2c961689825c45269ed6640cae0a1b89b7a887d9fe5e9fe813797ffc2a391d7f"
+    },
+    {
+      "path": "accounts.js",
+      "sha256": "275f6dd9c662024e668e8d1fabd19e3182558a4e6ff2ac42ce3c29725ccac390"
+    },
+    {
+      "path": "game.js",
+      "sha256": "52a6eea7813fd3c25d814264be8ee715dbac196b15c74d79d96466f242890be5"
+    },
+    {
+      "path": "index.html",
+      "sha256": "ce6aaf523fe48a91d1685a7a74d24986b377ef3a4f1a8b38ad87f0a0ef50b5ff"
+    },
+    {
+      "path": "network.js",
+      "sha256": "cf83aa870825cb8097fe23a4aa97b6f3ba17e04fd8b47dd9ead0d9d1e150ea2c"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "36f7d9ac0cdf49454d89ad788cbc4d0c153a968b1207be60300f4bf14abcda68"
+    },
+    {
+      "path": "package.json",
+      "sha256": "e9b8b0bd5d112cdfb56907fcce7582b1eaf073301b9a2c8fc59b68d80237fa9e"
+    },
+    {
+      "path": "progression-ui.js",
+      "sha256": "bdec02f7ce9a078e4dba6e14c3aebe2ba0a115b54ed65a9405de687596a4ed44"
+    },
+    {
+      "path": "rankings.js",
+      "sha256": "f87181c21938cbb41c3da77f24d9ffd0d685d7cd7fe8ac451d35f76a9c13f34a"
+    },
+    {
+      "path": "server.js",
+      "sha256": "1ca459d592205e37e16671551ec2fcddfb6591f89fbdea53f2330d15e18c6377"
+    },
+    {
+      "path": "server/accounts.cjs",
+      "sha256": "f5cf800c4673520144e8733b8a621f29c11f2c344664c33cbfccc516204fc7e8"
+    },
+    {
+      "path": "server/world.js",
+      "sha256": "5f0ff613b0b8d3b1b1df83d6a6bd4e6149343ff5440450c02893f8dbf37ed57f"
+    },
+    {
+      "path": "squad-ui.js",
+      "sha256": "f0e3e9f476d5bd1afb85a6e1b96265c1b484410f0ead04a3323952a491476de0"
+    },
+    {
+      "path": "tests/accounts.cjs",
+      "sha256": "d3041bf38bcf790a337c35107bc687a3814975745c85ad9151cdde26ac18887a"
+    },
+    {
+      "path": "tests/browser-progression.cjs",
+      "sha256": "024ea0fa9c30b6d5161617336a44eec3d3796e7e8f70be0753bcb5f1548b2b88"
+    },
+    {
+      "path": "tests/loading.cjs",
+      "sha256": "9e6b517e94bb4727efc9c9a61eb1088cef865aa48d540822eab194d090252506"
+    },
+    {
+      "path": "tests/progression.cjs",
+      "sha256": "8e8321369b2637b228340c816f060bdeef1fc38cb036f5e274a06840953a77dd"
+    },
+    {
+      "path": "verification/PROGRESSION-V1.1.14.md",
+      "sha256": "c9042da468bfa0d9ee396abef6a8342fc5ff3514d931224c419c8445bdc9b454"
+    },
+    {
+      "path": "verification/browser-accounts-V1.1.14.log",
+      "sha256": "5d4771512d1eba2cdb4252831ab7fe9aa48a6a0819630f20138f7cff684cb105"
+    },
+    {
+      "path": "verification/browser-progression-V1.1.14.log",
+      "sha256": "562f8fdd5a79a4d115ccc5075417580eae091128e1c0f391395184ca59a4b98f"
+    },
+    {
+      "path": "verification/native-tests-V1.1.14.log",
+      "sha256": "76378e19c4afa2193befadd6521fec27b63d527ccb968320a0a0c5bf7fcb45e7"
+    },
+    {
+      "path": "verification/standard-tests-V1.1.14.log",
+      "sha256": "a95906dcaf1ec1afc8651bf4ce99827b550798f66572ae3de357029b1898bb22"
+    },
+    {
+      "path": "verification/syntax-check-V1.1.14.log",
+      "sha256": "a9276989511437675af32d133703a450fccace4ff216724cf6702aa15d6462b0"
+    },
+    {
+      "path": "version.js",
+      "sha256": "6a1955c0de0973dbd9b3e6f6ecea5cbe64c22bd12603fb0a2ccaa7b32f8cf9d6"
+    }
+  ],
+  "deletedFiles": []
+}

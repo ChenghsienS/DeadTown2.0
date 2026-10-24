@@ -59,9 +59,9 @@ const Net=(()=>{
   function renderRoom(){
     if(!room)return;const chatFocused=SquadUI.typing;screen='room';const own=room.members.find(p=>p.id===id),host=room.hostId===id;
     const waiting=room.status==='waiting',starting=room.status==='starting',ended=room.status==='ended';
-    chrome(tr('行动准备','SQUAD BRIEFING'),`<span class="eyebrow">ROOM ${room.id} / ${room.members.length} OF ${room.capacity}</span><h2>${escapeHtml(room.name)}</h2><p>${tr('同一座小镇，共同抵抗尸潮。拾取物先到先得，燃烧和爆炸仍会伤及队友。','One town, one squad. Supplies go to the first eligible survivor. Fire and explosions can affect teammates.')}</p><div class="netMembers">${room.members.map((p,i)=>`<div class="netMember">${AccountPortraits.markup(p.avatarId)}<canvas class="netPortrait" width="72" height="84" data-member-preview="${p.id}"></canvas><strong class="${p.id===id?'selfName':'allyName'}">${escapeHtml(p.name)} ${p.id===id?tr('（你）','(you)'):''}<small>${p.id===room.hostId?tr('房主','SQUAD LEADER'):tr('幸存者','SURVIVOR')}</small></strong><span class="netState ${p.ready?'ready':''}">${p.ready?tr('已准备','READY'):tr('未准备','NOT READY')}</span></div>`).join('')}</div>${waiting||ended?PlayerSkins.markup(own||PlayerSkins.load()):''}${ended&&room.result?`<div class="netResult"><strong>${Math.floor(room.result.score)} <small>${tr('团队分数','TEAM SCORE')}</small></strong><span>${room.result.kills} ${tr('击杀','KILLS')} · ${formatTime(room.result.time)}</span></div>${SquadUI.result(room.result.ranking)}<p class="boardNote">${tr('合作成绩不计入单人排行榜。阵亡玩家在下一局重新加入。','Co-op scores do not enter the solo leaderboard. Fallen survivors return next round.')}</p>`:''}${waiting&&room.startsInMs>0?`<div class="netCountdown" role="status" aria-live="polite"><strong id="netCountdownValue">${Math.ceil(room.startsInMs/1000)}</strong><span>${tr('全员准备完毕，即将开始','Everyone is ready. Starting soon.')}<br><small>${tr('取消准备可停止倒计时','Cancel ready to stop the countdown.')}</small></span></div>`:''}<div class="controls">${waiting?`<button id="netReady" class="primary">${own?.ready?tr('取消准备','Cancel ready'):tr('准备','Ready up')}</button>${host?`<button id="netStart">${tr('立即开始','Start now')} →</button>`:''}`:starting?`<button disabled>${tr('正在生成小镇…','Generating town…')}</button>`:ended&&host?`<button id="netRematch" class="primary">${tr('准备下一局','Next round')} →</button>`:''}<button id="netLeave">${tr('离开房间','Leave room')}</button></div><div id="roomChatMount"></div><p class="boardNote">${waiting?tr('房主可随时立即开始。全员准备后自动倒计时 5 秒；取消准备或人员变动会重置倒计时。开局后不可加入。','The leader can start anytime. Everyone ready starts a 5-second countdown; readiness or roster changes reset it. No joining during a match.'):ended&&!host?tr('等待房主开启下一局。','Waiting for the leader to open the next round.'):''}</p>`);
+    chrome(tr('行动准备','SQUAD BRIEFING'),`<span class="eyebrow">ROOM ${room.id} / ${room.members.length} OF ${room.capacity}</span><h2>${escapeHtml(room.name)}</h2><p>${tr('同一座小镇，共同抵抗尸潮。拾取物先到先得，燃烧和爆炸仍会伤及队友。','One town, one squad. Supplies go to the first eligible survivor. Fire and explosions can affect teammates.')}</p><div class="netMembers">${room.members.map((p,i)=>`<div class="netMember">${AccountPortraits.markup(p.avatarId)}<canvas class="netPortrait" width="72" height="84" data-member-preview="${p.id}"></canvas><strong class="${p.id===id?'selfName':'allyName'}">${escapeHtml(p.name)} ${ProgressUI.levelTag(p.level)} ${p.id===id?tr('（你）','(you)'):''}<small>${p.id===room.hostId?tr('房主','SQUAD LEADER'):tr('幸存者','SURVIVOR')}</small></strong><span class="netState ${p.ready?'ready':''}">${p.ready?tr('已准备','READY'):tr('未准备','NOT READY')}</span></div>`).join('')}</div>${waiting||ended?PlayerSkins.markup(own||PlayerSkins.load()):''}${ended&&room.result?`<div class="netResult"><strong>${Math.floor(room.result.score)} <small>${tr('团队分数','TEAM SCORE')}</small></strong><span>${room.result.kills} ${tr('击杀','KILLS')} · ${formatTime(room.result.time)}</span></div>${ProgressUI.markup()}${SquadUI.result(room.result.ranking)}<p class="boardNote">${tr('合作成绩不计入单人排行榜。阵亡玩家在下一局重新加入。','Co-op scores do not enter the solo leaderboard. Fallen survivors return next round.')}</p>`:''}${waiting&&room.startsInMs>0?`<div class="netCountdown" role="status" aria-live="polite"><strong id="netCountdownValue">${Math.ceil(room.startsInMs/1000)}</strong><span>${tr('全员准备完毕，即将开始','Everyone is ready. Starting soon.')}<br><small>${tr('取消准备可停止倒计时','Cancel ready to stop the countdown.')}</small></span></div>`:''}<div class="controls">${waiting?`<button id="netReady" class="primary">${own?.ready?tr('取消准备','Cancel ready'):tr('准备','Ready up')}</button>${host?`<button id="netStart">${tr('立即开始','Start now')} →</button>`:''}`:starting?`<button disabled>${tr('正在生成小镇…','Generating town…')}</button>`:ended&&host?`<button id="netRematch" class="primary">${tr('准备下一局','Next round')} →</button>`:''}<button id="netLeave">${tr('离开房间','Leave room')}</button></div><div id="roomChatMount"></div><p class="boardNote">${waiting?tr('房主可随时立即开始。全员准备后自动倒计时 5 秒；取消准备或人员变动会重置倒计时。开局后不可加入。','The leader can start anytime. Everyone ready starts a 5-second countdown; readiness or roster changes reset it. No joining during a match.'):ended&&!host?tr('等待房主开启下一局。','Waiting for the leader to open the next round.'):''}</p>`);
     for(const c of document.querySelectorAll('[data-member-preview]')){const p=room.members.find(p=>p.id===c.dataset.memberPreview),g=c.getContext('2d');g.imageSmoothingEnabled=false;g.drawImage(PixelArt.sprite('player','idle',0,0,0,false,p),0,0,72,84);}
-    PlayerSkins.bind($('overlayCard'),own||PlayerSkins.load(),appearance=>{if(originalPlayer)Object.assign(originalPlayer,appearance);send({type:'appearance',appearance});});SquadUI.mount(chatFocused);
+    ProgressUI.mount();PlayerSkins.bind($('overlayCard'),own||PlayerSkins.load(),appearance=>{if(originalPlayer)Object.assign(originalPlayer,appearance);send({type:'appearance',appearance});});SquadUI.mount(chatFocused);
     $('netReady')&&($('netReady').onclick=()=>send({type:'ready'}));$('netStart')&&($('netStart').onclick=()=>send({type:'start'}));$('netRematch')&&($('netRematch').onclick=()=>send({type:'rematch'}));$('netLeave').onclick=leave;
   }
   function renderMenu(){
@@ -74,7 +74,8 @@ const Net=(()=>{
     if(menu)renderMenu();else{screen='game';$('overlay').classList.add('hidden');}SquadUI.mount();SquadUI.team();updateGameUI();updateCursorVisibility();
   }
   function resetVisuals(){BossAttack.reset();PixelArt.reset();Arsenal.reset();Weather.reset();Lighting.reset();state.keys.clear();mouseDown=false;actions=[];NetInterpolation.reset();NetPrediction.reset();decoder.reset();pendingSnapshot=null;pendingEvents.clear();resyncAt=-Infinity;clearTimeout(flushTimer);flushTimer=null;}
-  function begin(s){
+  function begin(s,matchId){
+    const self=s.players.find(p=>p.id===id);ProgressUI.begin('coop',self?.accountId||null,matchId);
     SquadUI.closeInput();if(room)room.status='playing';round++;lastEvent=0;lastSnapshot=null;sequence=0;endAt=0;menu=false;screen='game';status='';resetVisuals();
     packets=[];networkStarted=performance.now();resyncs=0;
     player={...originalPlayer,maxHp:100,hp:100};Coop.setRoster([player]);resetGame(s.seed);state.devMode=false;state.loading=false;state.loadDone=true;
@@ -145,12 +146,13 @@ const Net=(()=>{
   }
   function receive(m){
     if(m.type==='welcome')binding=typeof m.binding==='string'?m.binding:'';
-    if((m.type==='welcome'||m.type==='identity')&&m.self){state.playerName=m.self.name;if(Accounts.user&&Accounts.user.id===m.self.accountId){Accounts.user.displayName=m.self.name;Accounts.user.avatarId=m.self.avatarId;}}
+    if((m.type==='welcome'||m.type==='identity')&&m.self){state.playerName=m.self.name;if(Accounts.user&&Accounts.user.id===m.self.accountId){Accounts.user.displayName=m.self.name;Accounts.user.avatarId=m.self.avatarId;Accounts.user.level=m.self.level;}}
+    if(m.type==='accountProgress'){ProgressUI.receive(m.reward,m.user);return;}
     if(m.type==='identity'){if(!state.running)localize();return;}
     if(m.type==='welcome'){clearTimeout(connectTimer);connected=true;id=m.id;serverName=m.name;status='';inputTimer=setInterval(transmit,33);screen='';}
     else if(m.type==='lobby'){rooms=m.rooms;serverName=m.name;if(!room)renderLobby();}
     else if(m.type==='room'){
-      const old=room;room=m.room;countdownRemaining=room.startsInMs||0;countdownAt=performance.now();
+      const old=room;room=m.room;ProgressUI.coop(room);countdownRemaining=room.startsInMs||0;countdownAt=performance.now();
       if(room.status==='waiting'||room.status==='starting')renderRoom();
       else if(room.status==='ended'){
         // Once the report is visible, refresh cosmetics, members and controls
@@ -161,7 +163,7 @@ const Net=(()=>{
     }
     else if(m.type==='chat')SquadUI.receive(m.message);
     else if(m.type==='chatHistory')SquadUI.history(m.messages);
-    else if(m.type==='start')begin(m.snapshot);
+    else if(m.type==='start')begin(m.snapshot,m.matchId);
     else if(m.type==='snapshot')queueSnapshot(m.snapshot);
     else if(m.type==='state'){
       let snapshot;

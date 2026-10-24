@@ -15,16 +15,13 @@ function clean(value,max){return typeof value==='string'?value.replace(/[\u0000-
 function createHost(options={}){
   const rooms=new Map(),clients=new Map();let closed=false;
   const accounts=new AccountStore({directory:options.dataDir});
-  function identity(c){return {name:c.name,accountId:c.user?.id||null,avatarId:c.user?.avatarId||'guest'};}
-  function updateIdentity(c,user){c.user=user;c.name=user.displayName;send(c,{type:'identity',self:identity(c)});const r=rooms.get(c.room);if(r){r.worker?.postMessage({type:'identity',id:c.id,...identity(c)});if(r.result?.ranking)for(const p of r.result.ranking)if(p.id===c.id){p.name=user.displayName;p.avatarId=user.avatarId;p.accountId=user.id;}}return r;}
+  function identity(c){return {name:c.name,accountId:c.user?.id||null,avatarId:c.user?.avatarId||'guest',level:c.user?.level||null};}
+  function updateIdentity(c,user){c.user=user;c.name=user.displayName;send(c,{type:'identity',self:identity(c)});const r=rooms.get(c.room);if(r){r.worker?.postMessage({type:'identity',id:c.id,...identity(c)});if(r.result?.ranking)for(const p of r.result.ranking)if(p.id===c.id){p.name=user.displayName;p.avatarId=user.avatarId;p.accountId=user.id;p.level=user.level;}}return r;}
+  function accountChanged(user,reward=null){const changedRooms=new Set();for(const c of clients.values())if(c.user?.id===user.id){const r=updateIdentity(c,user);send(c,{type:'accountProgress',user,...(reward?{reward}:{})});if(r)changedRooms.add(r);}for(const r of changedRooms)announceRoom(r);}
   const accountAPI=createAccountAPI(accounts,{signedIn(user,token,req){
     const binding=req.headers['x-deadtown-connection'];if(typeof binding!=='string'||binding.length!==48)return;
     const c=[...clients.values()].find(c=>c.binding===binding&&c.hello);if(!c)return;c.sessionToken=token;const r=updateIdentity(c,user);if(r)announceRoom(r);
-  },changed(user){
-    const changedRooms=new Set();
-    for(const c of clients.values())if(c.user?.id===user.id){const r=updateIdentity(c,user);if(r)changedRooms.add(r);}
-    for(const r of changedRooms)announceRoom(r);
-  },signedOut(token){for(const c of clients.values())if(c.sessionToken===token)c.ws.close(1008,'Session ended');}});
+  },changed:accountChanged,signedOut(token){for(const c of clients.values())if(c.sessionToken===token)c.ws.close(1008,'Session ended');}});
   const maxRooms=Math.max(1,Math.min(12,Number(options.maxRooms??process.env.MAX_ROOMS)||4));
   const hostName=clean(options.name??process.env.SERVER_NAME,40)||'Dead Town';
   const server=http.createServer((req,res)=>{
@@ -66,18 +63,39 @@ function createHost(options={}){
       else{if(r.hostId===c.id)r.hostId=r.members.keys().next().value;checkCountdown(r);announceRoom(r);}}
     if(notify){send(c,{type:'left'});lobby(c);}announceLobby();
   }
+  const settlements=new Set();
+  function settleRound(r,matchId,entries){
+    // Freeze who actually completed the match before any player leaves the report.
+    const job={r,matchId,entries,timer:null,promise:null};settlements.add(job);
+    const attempt=()=>{
+      if(closed)return;
+      job.promise=accounts.finishCoop(matchId,entries).then(results=>{
+        settlements.delete(job);
+        if(r.result?.matchId===matchId){r.result.rewards=results.map(v=>v.reward);r.result.rewardState='saved';}
+        for(const {user,reward} of results)accountChanged(user,reward);
+        if(rooms.get(r.id)===r&&r.result?.matchId===matchId)announceRoom(r);
+      }).catch(err=>{
+        console.error('Account match settlement:',err.code||err.message);
+        if(!closed){job.timer=setTimeout(attempt,5000);job.timer.unref();}
+      });
+    };attempt();
+  }
   function start(r){
     if(r.status!=='waiting'||!r.members.size)return;cancelCountdown(r);
-    r.status='starting';r.result=null;announceRoom(r);announceLobby();
+    r.status='starting';r.result=null;r.matchId=randomBytes(24).toString('hex');r.participants=new Map([...r.members.values()].map(c=>[c.id,c.user?.id||null]));announceRoom(r);announceLobby();
     const worker=r.worker=new Worker(path.join(root,'server/room-worker.cjs'),{workerData:{members:[...r.members.values()].map(c=>({id:c.id,...identity(c),...c.appearance})),seed:randomBytes(4).readUInt32LE()}});
     let failed=false;
     function failure(err){if(failed||r.worker!==worker||!rooms.has(r.id))return;failed=true;console.error('Room '+r.id+':',err);worker.terminate();r.worker=null;r.status='waiting';for(const c of r.members.values()){c.ready=false;error(c,'room_failed');}announceRoom(r);announceLobby();}
     worker.on('error',failure);worker.on('exit',code=>{if(code!==0&&r.worker===worker)failure('Worker exited '+code);});
     worker.on('message',m=>{
       if(r.worker!==worker||!rooms.has(r.id))return;
-      if(m.type==='started'){r.status='playing';for(const c of r.members.values()){c.stream.reset();c.sequence=-1;send(c,{type:'start',snapshot:m.snapshot});}announceRoom(r);announceLobby();}
+      if(m.type==='started'){r.status='playing';for(const c of r.members.values()){c.stream.reset();c.sequence=-1;send(c,{type:'start',snapshot:m.snapshot,matchId:r.matchId});}announceRoom(r);announceLobby();}
       else if(m.type==='snapshot'){const message=JSON.parse(m.payload);for(const c of r.members.values())c.stream.offer(message);}
-      else if(m.type==='ended'){r.result={score:m.score,kills:m.kills,time:m.time,ranking:m.ranking};r.status='ended';r.worker=null;worker.terminate();for(const c of r.members.values())c.ready=false;announceRoom(r);announceLobby();}
+      else if(m.type==='ended'){
+        const entries=m.ranking.filter(p=>p.connected!==false&&r.participants.get(p.id)&&r.members.get(p.id)?.user?.id===r.participants.get(p.id)).map(p=>({accountId:r.participants.get(p.id),score:Math.floor(p.score)}));
+        r.result={score:m.score,kills:m.kills,time:m.time,ranking:m.ranking,matchId:r.matchId,rewards:[],rewardState:entries.length?'pending':'saved'};r.status='ended';r.worker=null;worker.terminate();for(const c of r.members.values())c.ready=false;announceRoom(r);announceLobby();
+        if(entries.length)settleRound(r,r.matchId,entries);
+      }
     });
   }
   function dispatch(c,m){
@@ -158,7 +176,7 @@ function createHost(options={}){
     const timer=setTimeout(()=>{if(!c.hello)ws.close(1008,'Hello timeout');},10000);timer.unref();ws.on('close',()=>clearTimeout(timer));
   });
   const heartbeat=setInterval(()=>{for(const c of clients.values()){if(c.user&&!accounts.session(c.sessionToken)){c.ws.close(1008,'Session expired');continue;}if(!c.alive){c.ws.terminate();continue;}c.alive=false;c.ws.ping();}},15000);heartbeat.unref();
-  async function close(){if(closed)return;closed=true;clearInterval(heartbeat);for(const r of rooms.values()){cancelCountdown(r);const w=r.worker;r.worker=null;await w?.terminate();}rooms.clear();for(const c of clients.values())c.ws.terminate();await new Promise(resolve=>wss.close(resolve));await new Promise(resolve=>server.close(resolve));await accounts.close();}
+  async function close(){if(closed)return;closed=true;clearInterval(heartbeat);for(const job of settlements)clearTimeout(job.timer);for(const r of rooms.values()){cancelCountdown(r);const w=r.worker;r.worker=null;await w?.terminate();}rooms.clear();for(const c of clients.values())c.ws.terminate();await new Promise(resolve=>wss.close(resolve));await new Promise(resolve=>server.close(resolve));await Promise.allSettled([...settlements].map(j=>j.promise));await accounts.close();}
   return {server,rooms,clients,accounts,close,listen(port=Number(process.env.PORT)||8080,host=process.env.HOST||'0.0.0.0'){return new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,()=>{server.removeListener('error',reject);resolve(server.address());});});}};
 }
 if(require.main===module){
