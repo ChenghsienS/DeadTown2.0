@@ -16,7 +16,7 @@ function createHost(options={}){
   const rooms=new Map(),clients=new Map();let closed=false;
   const accounts=new AccountStore({directory:options.dataDir});
   function identity(c){return {name:c.name,accountId:c.user?.id||null,avatarId:c.user?.avatarId||'guest',level:c.user?.level||null};}
-  function updateIdentity(c,user){c.user=user;c.name=user.displayName;send(c,{type:'identity',self:identity(c)});const r=rooms.get(c.room);if(r){r.worker?.postMessage({type:'identity',id:c.id,...identity(c)});if(r.result?.ranking)for(const p of r.result.ranking)if(p.id===c.id){p.name=user.displayName;p.avatarId=user.avatarId;p.accountId=user.id;p.level=user.level;}}return r;}
+  function updateIdentity(c,user){const active=rooms.get(c.room);if(!active||['waiting','ended'].includes(active.status))c.appearance=PlayerSkins.normalize(user.equippedSkin);c.user=user;c.name=user.displayName;send(c,{type:'identity',self:identity(c)});const r=rooms.get(c.room);if(r){r.worker?.postMessage({type:'identity',id:c.id,...identity(c)});if(r.result?.ranking)for(const p of r.result.ranking)if(p.id===c.id){p.name=user.displayName;p.avatarId=user.avatarId;p.accountId=user.id;p.level=user.level;}}return r;}
   function accountChanged(user,reward=null){const changedRooms=new Set();for(const c of clients.values())if(c.user?.id===user.id){const r=updateIdentity(c,user);send(c,{type:'accountProgress',user,...(reward?{reward}:{})});if(r)changedRooms.add(r);}for(const r of changedRooms)announceRoom(r);}
   const accountAPI=createAccountAPI(accounts,{signedIn(user,token,req){
     const binding=req.headers['x-deadtown-connection'];if(typeof binding!=='string'||binding.length!==48)return;
@@ -38,17 +38,17 @@ function createHost(options={}){
   function send(c,data){if(c.ws.readyState===WebSocket.OPEN)c.ws.send(JSON.stringify(data));}
   function error(c,code){send(c,{type:'error',code});}
   const publicRoom=r=>({id:r.id,name:r.name,capacity:r.capacity,count:r.members.size,locked:!!r.password,status:r.status,hostId:r.hostId});
-  function roomInfo(r){return {...publicRoom(r),members:[...r.members.values()].map(c=>({id:c.id,...identity(c),ready:c.ready,...c.appearance})),result:r.result||null,startsInMs:r.countdownEnd?Math.max(0,r.countdownEnd-Date.now()):0};}
-  function announceRoom(r){for(const c of r.members.values())send(c,{type:'room',room:roomInfo(r)});}
+  function roomInfo(r,viewer){return {...publicRoom(r),members:[...r.members.values()].map(c=>({id:c.id,...identity(c),ready:c.ready,...c.appearance})),result:r.result?{...r.result,rewards:(r.result.rewards||[]).filter(reward=>reward.accountId===viewer?.user?.id)}:null,startsInMs:r.countdownEnd?Math.max(0,r.countdownEnd-Date.now()):0};}
+  function announceRoom(r){for(const c of r.members.values())send(c,{type:'room',room:roomInfo(r,c)});}
   function lobby(c){send(c,{type:'lobby',name:hostName,rooms:[...rooms.values()].map(publicRoom)});}
   function announceLobby(){for(const c of clients.values())if(c.hello&&!c.room)lobby(c);}
   function cancelCountdown(r){clearInterval(r.countdownTimer);r.countdownTimer=null;r.countdownEnd=0;}
   function checkCountdown(r){
-    if(r.status!=='waiting'||![...r.members.values()].every(c=>c.ready)||!r.members.size){cancelCountdown(r);return;}
+    if(r.status!=='waiting'||![...r.members.values()].every(c=>c.ready)||r.members.size<2){cancelCountdown(r);return;}
     if(r.countdownTimer)return;
     r.countdownEnd=Date.now()+5000;let displayed=5;
     r.countdownTimer=setInterval(()=>{
-      if(closed||!rooms.has(r.id)||r.status!=='waiting'||![...r.members.values()].every(c=>c.ready)){cancelCountdown(r);return;}
+      if(closed||!rooms.has(r.id)||r.status!=='waiting'||r.members.size<2||![...r.members.values()].every(c=>c.ready)){cancelCountdown(r);return;}
       const left=Math.ceil((r.countdownEnd-Date.now())/1000);
       if(left<=0){start(r);return;}
       if(left!==displayed){displayed=left;announceRoom(r);}
@@ -64,12 +64,12 @@ function createHost(options={}){
     if(notify){send(c,{type:'left'});lobby(c);}announceLobby();
   }
   const settlements=new Set();
-  function settleRound(r,matchId,entries){
+  function settleRound(r,matchId,entries,completedAt){
     // Freeze who actually completed the match before any player leaves the report.
     const job={r,matchId,entries,timer:null,promise:null};settlements.add(job);
     const attempt=()=>{
       if(closed)return;
-      job.promise=accounts.finishCoop(matchId,entries).then(results=>{
+      job.promise=accounts.finishCoop(matchId,entries,completedAt).then(results=>{
         settlements.delete(job);
         if(r.result?.matchId===matchId){r.result.rewards=results.map(v=>v.reward);r.result.rewardState='saved';}
         for(const {user,reward} of results)accountChanged(user,reward);
@@ -81,7 +81,8 @@ function createHost(options={}){
     };attempt();
   }
   function start(r){
-    if(r.status!=='waiting'||!r.members.size)return;cancelCountdown(r);
+    if(r.status!=='waiting'||r.members.size<2)return;cancelCountdown(r);
+    for(const c of r.members.values())c.appearance=PlayerSkins.normalize(c.user?.equippedSkin);
     r.status='starting';r.result=null;r.matchId=randomBytes(24).toString('hex');r.participants=new Map([...r.members.values()].map(c=>[c.id,c.user?.id||null]));announceRoom(r);announceLobby();
     const worker=r.worker=new Worker(path.join(root,'server/room-worker.cjs'),{workerData:{members:[...r.members.values()].map(c=>({id:c.id,...identity(c),...c.appearance})),seed:randomBytes(4).readUInt32LE()}});
     let failed=false;
@@ -92,9 +93,9 @@ function createHost(options={}){
       if(m.type==='started'){r.status='playing';for(const c of r.members.values()){c.stream.reset();c.sequence=-1;send(c,{type:'start',snapshot:m.snapshot,matchId:r.matchId});}announceRoom(r);announceLobby();}
       else if(m.type==='snapshot'){const message=JSON.parse(m.payload);for(const c of r.members.values())c.stream.offer(message);}
       else if(m.type==='ended'){
-        const entries=m.ranking.filter(p=>p.connected!==false&&r.participants.get(p.id)&&r.members.get(p.id)?.user?.id===r.participants.get(p.id)).map(p=>({accountId:r.participants.get(p.id),score:Math.floor(p.score)}));
+        const entries=m.ranking.filter(p=>p.connected!==false&&r.participants.get(p.id)&&r.members.get(p.id)?.user?.id===r.participants.get(p.id)).map(p=>({accountId:r.participants.get(p.id),score:Math.floor(p.score),kills:p.kills||0,duration:m.time}));
         r.result={score:m.score,kills:m.kills,time:m.time,ranking:m.ranking,matchId:r.matchId,rewards:[],rewardState:entries.length?'pending':'saved'};r.status='ended';r.worker=null;worker.terminate();for(const c of r.members.values())c.ready=false;announceRoom(r);announceLobby();
-        if(entries.length)settleRound(r,r.matchId,entries);
+        if(entries.length)settleRound(r,r.matchId,entries,accounts.now());
       }
     });
   }
@@ -103,7 +104,7 @@ function createHost(options={}){
     if(m.type==='hello'){
       if(m.version!==version)return error(c,'version');
       if(c.hello)return;c.user=c.sessionToken?accounts.session(c.sessionToken):null;const name=c.user?.displayName||AccountRules.guestName(m.name);if(!name)return error(c,'name');
-      c.hello=true;c.name=name;c.appearance=PlayerSkins.normalize(m.appearance);if(m.snapshotCodec===1)c.stream.enableCodec();send(c,{type:'welcome',id:c.id,version,name:hostName,maxRooms,self:identity(c),binding:c.binding});return lobby(c);
+      c.hello=true;c.name=name;c.appearance=PlayerSkins.normalize(c.user?.equippedSkin);if(m.snapshotCodec===1)c.stream.enableCodec();send(c,{type:'welcome',id:c.id,version,name:hostName,maxRooms,self:identity(c),binding:c.binding});return lobby(c);
     }
     if(!c.hello)return error(c,'hello_first');
     if(m.type==='ping')return send(c,{type:'pong',at:m.at});
@@ -131,7 +132,11 @@ function createHost(options={}){
     if(m.type==='resync'){if(Date.now()-(c.lastResync||0)>1000){c.lastResync=Date.now();c.stream.keyframe();}return;}
     if(m.type==='appearance'){
       if(!['waiting','ended'].includes(r.status))return error(c,'in_progress');
-      c.appearance=PlayerSkins.normalize(m.appearance);announceRoom(r);return;
+      const look=PlayerSkins.normalize(m.appearance);if(!c.user)return error(c,'auth_required');
+      c.user=accounts.session(c.sessionToken);if(!c.user)return error(c,'auth_required');
+      if(!c.user.ownedSkins.includes(PlayerSkins.key(look)))return error(c,'skin_locked');
+      // Changes are persisted via the authenticated HTTP appearance endpoint.
+      c.appearance=PlayerSkins.normalize(c.user.equippedSkin);announceRoom(r);return;
     }
     if(m.type==='chat'){
       const text=clean(m.text,160).replace(/[\u202a-\u202e\u2066-\u2069]/g,'');if(!text)return;
@@ -144,6 +149,7 @@ function createHost(options={}){
     if(m.type==='start'){
       if(c.id!==r.hostId)return error(c,'host_only');
       if(r.status!=='waiting')return error(c,'in_progress');
+      if(r.members.size<2)return error(c,'need_players');
       return start(r);
     }
     if(m.type==='rematch'){

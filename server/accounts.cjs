@@ -4,11 +4,13 @@ const {randomBytes,randomUUID,createHash,scrypt,timingSafeEqual}=require('node:c
 const {promisify}=require('node:util');
 const Rules=require('../account-rules.js');
 const Progress=require('../account-progress.js');
+const Economy=require('../account-economy.js');
+const ensureEconomy=u=>u.economy||(u.economy=Economy.initial(Progress.info(u.totalXp).level));
 const derive=promisify(scrypt),SESSION_MS=7*86400000,RUN_MS=86400000;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const fault=(code,status=400)=>Object.assign(new Error(code),{code,status});
 const empty=()=>({schema:1,users:[],sessions:[],runs:[]});
-const summary=(u,now=Date.now())=>({id:u.id,username:u.username,displayName:u.displayName,avatarId:u.avatarId,bestScore:u.bestScore||0,...Progress.info(u.totalXp),nameChangeAvailableAt:u.nameChangedAt?u.nameChangedAt+Progress.RENAME_MS:0,serverTime:now});
+const summary=(u,now=Date.now())=>({id:u.id,username:u.username,displayName:u.displayName,avatarId:u.avatarId,bestScore:u.bestScore||0,...Progress.info(u.totalXp),nameChangeAvailableAt:u.nameChangedAt?u.nameChangedAt+Progress.RENAME_MS:0,serverTime:now,tokens:ensureEconomy(u).tokens,ownedSkins:[...u.economy.owned],equippedSkin:Economy.get(u.economy.equipped)||Economy.get(Economy.DEFAULT),economyRevision:u.economy.revision,daily:Economy.daily(u.economy,now)});
 class AccountStore{
   constructor({directory=process.env.DEADTOWN_DATA_DIR||path.join(os.homedir(),'.local','share','deadtown'),now=Date.now}={}){
     this.directory=path.resolve(directory);this.file=path.join(this.directory,'accounts.json');this.lock=path.join(this.directory,'accounts.lock');this.now=now;this.data=empty();this.queue=Promise.resolve();this.opened=false;this.busy=0;this.closed=false;
@@ -27,6 +29,7 @@ class AccountStore{
     try{
       try{this.data=JSON.parse(fs.readFileSync(this.file,'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
       if(this.data.schema!==1||!Array.isArray(this.data.users)||!Array.isArray(this.data.sessions)||!Array.isArray(this.data.runs))throw Error('Invalid account database; restore a backup.');
+      for(const u of this.data.users)ensureEconomy(u);
       this.opened=true;
     }catch(e){fs.closeSync(this.fd);fs.unlinkSync(this.lock);throw e;}
   }
@@ -94,6 +97,27 @@ class AccountStore{
       u.avatarId=fields.avatarId;return summary(u,now);
     });
   }
+  async purchase(token,skin){
+    if(!Economy.get(skin)||skin===Economy.DEFAULT)throw fault('skin_invalid');
+    return this.change(data=>{
+      const session=this.session(token);if(!session)throw fault('auth_required',401);
+      const u=data.users.find(u=>u.id===session.id),e=ensureEconomy(u);
+      if(e.owned.includes(skin))return {user:summary(u,this.now()),purchased:false};
+      if(e.tokens<Economy.PRICE)throw fault('tokens_insufficient',409);
+      e.tokens-=Economy.PRICE;e.owned.push(skin);e.revision++;
+      return {user:summary(u,this.now()),purchased:true};
+    });
+  }
+  async equip(token,skin){
+    if(!Economy.get(skin))throw fault('skin_invalid');
+    return this.change(data=>{
+      const session=this.session(token);if(!session)throw fault('auth_required',401);
+      const u=data.users.find(u=>u.id===session.id),e=ensureEconomy(u);
+      if(!e.owned.includes(skin))throw fault('skin_locked',403);
+      if(e.equipped!==skin){e.equipped=skin;e.revision++;}
+      return summary(u,this.now());
+    });
+  }
   leaderboard(){this.open();return this.data.users.filter(u=>u.bestScore>0).sort((a,b)=>b.bestScore-a.bestScore||a.bestAt-b.bestAt||a.id.localeCompare(b.id)).slice(0,10).map(u=>({accountId:u.id,player_name:u.displayName,avatarId:u.avatarId,level:Progress.info(u.totalXp).level,best_score:u.bestScore,updated_at:new Date(u.bestAt).toISOString()}));}
   async beginRun(token,accountId){
     return this.change(data=>{
@@ -104,8 +128,9 @@ class AccountStore{
       data.runs.push({id:runId,userId:u.id,mode:'solo',started:this.now(),expires:this.now()+RUN_MS,finished:false});return {runId,accountId:u.id};
     });
   }
-  async finishRun(token,{accountId,runId,score,duration,developer,completed}){
+  async finishRun(token,{accountId,runId,score,duration,developer,completed,kills=0}){
     if(!Number.isSafeInteger(score)||score<0||score>100000000||!Number.isFinite(duration)||duration<0||duration>86400||developer!==false)throw fault('invalid_score');
+    if(!Number.isSafeInteger(kills)||kills<0||kills>10000000)throw fault('invalid_score');
     return this.change(data=>{
       const user=this.session(token);if(!user)throw fault('auth_required',401);
       if(accountId!==user.id)throw fault('account_changed',409);
@@ -118,28 +143,33 @@ class AccountStore{
       run.finished=true;run.score=score;run.duration=duration;
       if(score>u.bestScore){u.bestScore=score;u.bestAt=this.now();}
       // Pre-upgrade queued runs retain their ranking, but never invent old XP.
-      if(run.mode==='solo')run.reward=this.award(u,runId,'solo',score);
+      if(run.mode==='solo')run.reward=this.award(u,runId,'solo',score,{kills,seconds:Math.floor(duration)});
       return {user:summary(u,this.now()),reward:run.reward||null};
     });
   }
-  award(user,id,mode,score){
-    const reward={id,accountId:user.id,mode,score,...Progress.reward(user.totalXp,score),completedAt:this.now()};
-    user.totalXp=reward.afterXp;return reward;
+  award(user,id,mode,score,stats={},completedAt=this.now()){
+    const e=ensureEconomy(user),reward={id,accountId:user.id,mode,score,...Progress.reward(user.totalXp,score),completedAt};
+    reward.levelTokens=(reward.afterLevel-reward.beforeLevel)*Economy.LEVEL_TOKENS;
+    e.tokens+=reward.levelTokens;
+    reward.daily=Economy.settle(e,{matches:1,score,kills:stats.kills||0,seconds:stats.seconds||0},completedAt);
+    reward.taskTokens=reward.daily.tokens;reward.gainedTokens=reward.levelTokens+reward.taskTokens;reward.balance=e.tokens;
+    e.revision++;user.totalXp=reward.afterXp;return reward;
   }
   // Internal only: the authoritative room worker supplies final personal scores.
-  async finishCoop(matchId,entries){
+  async finishCoop(matchId,entries,completedAt=this.now()){
     if(typeof matchId!=='string'||!/^[a-f0-9]{48}$/.test(matchId))throw fault('run_invalid',409);
     const scores=new Map();
     for(const entry of entries){
       if(typeof entry.accountId!=='string'||!Number.isSafeInteger(entry.score)||entry.score<0||entry.score>100000000)throw fault('invalid_score');
-      scores.set(entry.accountId,Math.max(scores.get(entry.accountId)||0,entry.score));
+      const previous=scores.get(entry.accountId);if(!previous||entry.score>previous.score)scores.set(entry.accountId,{score:entry.score,kills:Number.isSafeInteger(entry.kills)?Math.max(0,entry.kills):0,seconds:Number.isFinite(entry.duration)?Math.max(0,Math.floor(entry.duration)):0});
     }
     if(!scores.size)return [];
-    return this.change(data=>[...scores].flatMap(([accountId,score])=>{
+    return this.change(data=>[...scores].flatMap(([accountId,stats])=>{
+      const score=stats.score;
       const user=data.users.find(u=>u.id===accountId);if(!user)return [];
       const id='coop:'+matchId+':'+accountId,existing=data.runs.find(r=>r.id===id);
       if(existing){if(existing.score!==score)throw fault('run_invalid',409);return [{user:summary(user,this.now()),reward:existing.reward}];}
-      const reward=this.award(user,matchId,'coop',score);
+      const reward=this.award(user,matchId,'coop',score,stats,completedAt);
       data.runs.push({id,userId:accountId,mode:'coop',score,finished:true,reward,started:this.now(),expires:this.now()+RUN_MS});
       return [{user:summary(user,this.now()),reward}];
     }));
@@ -187,6 +217,8 @@ function createAccountAPI(store,{changed=()=>{},signedOut=()=>{},signedIn=()=>{}
       if(method==='POST'&&route==='/api/logout'){await store.logout(token);setCookie(res,'',req);if(token)signedOut(token);return reply(200,{user:null});}
       const user=store.session(token);if(!user)throw fault('auth_required',401);
       if(method==='PATCH'&&route==='/api/profile'){const updated=await store.profile(token,fields);changed(updated);return reply(200,{user:updated});}
+      if(method==='POST'&&route==='/api/shop/purchase'){const result=await store.purchase(token,fields.skin);changed(result.user);return reply(200,result);}
+      if(method==='PATCH'&&route==='/api/appearance'){const updated=await store.equip(token,fields.skin);changed(updated);return reply(200,{user:updated});}
       if(method==='POST'&&route==='/api/runs'){limit('run:'+user.id,12,60000);return reply(201,await store.beginRun(token,fields.accountId));}
       if(method==='POST'&&route==='/api/scores'){const result=await store.finishRun(token,fields);changed(result.user);return reply(200,result);}
       throw fault('not_found',404);

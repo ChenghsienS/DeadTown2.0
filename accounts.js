@@ -28,14 +28,21 @@ const Accounts=(()=>{
       if(!response.ok)throw {code:data.error||'service_unavailable',status:response.status,availableAt:data.availableAt,serverTime:data.serverTime};return data;
     }finally{clearTimeout(timer);}
   }
+  messages.tokens_insufficient=['代币不足，请完成任务或升级。','Not enough tokens. Complete tasks or level up.'];
+  messages.skin_invalid=['此皮肤不存在。','This skin does not exist.'];
+  messages.skin_locked=['请先购买这套皮肤。','Purchase this skin before equipping it.'];
   function bestKey(id=user?.id){return id?'dead_town_account_best:'+id:'dead_town_supply_v2_best';}
   let clockOffset=0;
   function mergeUser(next){
     if(!next||next.id!==user?.id)return;
-    const totalXp=Math.max(user.totalXp||0,next.totalXp||0);user={...user,...next,...AccountProgress.info(totalXp)};
-    if(Number.isFinite(next.serverTime))clockOffset=next.serverTime-Date.now();epoch++;
+    const totalXp=Math.max(user.totalXp||0,next.totalXp||0),older=(next.economyRevision||0)<(user.economyRevision||0)||((next.economyRevision||0)===(user.economyRevision||0)&&(next.serverTime||0)<(user.serverTime||0));
+    const keep=older?Object.fromEntries(['tokens','ownedSkins','equippedSkin','economyRevision','daily','serverTime'].map(k=>[k,user[k]])):{};
+    user={...user,...next,...keep,...AccountProgress.info(totalXp)};
+    if(!state.running||state.gameOver)Object.assign(player,PlayerSkins.load());
+    if(!older&&Number.isFinite(next.serverTime))clockOffset=next.serverTime-Date.now();epoch++;
     state.best=Math.max(state.best,user.bestScore||0);savePersonalBest();
     if(state.overlayScreen==='main'&&!state.loading)renderMainMenu();
+    if(typeof EconomyUI!=='undefined')EconomyUI.refresh();
   }
   function nameWait(){return Math.max(0,(user?.nameChangeAvailableAt||0)-(Date.now()+clockOffset));}
   function nameHint(){const left=nameWait();if(!left)return tr('每次改名后需等待 72 小时；修改头像不受限制。','After changing your name, wait 72 hours. Portrait changes are unrestricted.');const hours=Math.ceil(left/3600000),days=Math.floor(hours/24),rest=hours%24;return tr(`还需 ${days} 天 ${rest} 小时才能改名，头像仍可修改。`,`Name change available in ${days}d ${rest}h. You can still change your portrait.`);}
@@ -44,6 +51,8 @@ const Accounts=(()=>{
     const changed=user?.id!==next?.id;user=next||null;initialized=true;epoch++;if(Number.isFinite(user?.serverTime))clockOffset=user.serverTime-Date.now();
     if(changed&&typeof Rankings!=='undefined')Rankings.cancelRun();
     state.playerName=user?.displayName||AccountRules.guestName(localStorage.getItem('dead_town_player_name')||'Player');
+    if(!state.running||state.gameOver)Object.assign(player,PlayerSkins.load());
+    if(changed&&typeof EconomyUI!=='undefined')EconomyUI.accountChanged();
     player.avatarId=user?.avatarId||'guest';player.accountId=user?.id||null;
     let saved=0;try{saved=Number(localStorage.getItem(bestKey()))||0;}catch{}
     state.best=Math.max(saved,user?.bestScore||0);
@@ -53,7 +62,7 @@ const Accounts=(()=>{
       else if(state.overlayScreen==='main')renderMainMenu();
       else if(state.overlayScreen==='default-name-warning'&&user)renderMainMenu();
       else if(state.overlayScreen==='gameover')renderGameOverMenu();
-      updateHUD();
+      updateHUD();if(typeof EconomyUI!=='undefined')EconomyUI.refresh();
     }
   }
   function refresh(){

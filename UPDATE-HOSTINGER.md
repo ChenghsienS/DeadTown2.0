@@ -1,18 +1,32 @@
-# V1.1.14 → V1.2.0 更新
+# V1.2.0 → V1.2.1 更新
 
-本版替换你提供的三种霰弹枪开火声和一种换弹声，实际内嵌音效库同步更新。前后端版本必须一起更新。无新增生产依赖，无须 Supabase SQL 或重新注册账号。
+新增账号代币、独立皮肤商店和每日任务，移除 Legacy 历史榜；多人至少两人在房间才能开局。前后端需要一起更新。没有新增生产依赖，无需 SQL 或重新注册。
 
 ## 1. 上传 GitHub
 
-打开 <https://github.com/ChenghsienS/DeadTown2.0>。从 V1.1.14 升级可用 `DeadTown-V1.2.0-update.zip`；如果仍在 V1.1.13、更早版本，或者版本不明，使用 `DeadTown-V1.2.0.zip` 完整版。
+打开 <https://github.com/ChenghsienS/DeadTown2.0>。
 
-解压并进入 `DeadTown` 文件夹，将里面的文件与文件夹上传到仓库根目录并提交。不要上传 ZIP 本身，也不要在仓库根目录再套一层 `DeadTown`。本次更新不需要清空仓库。
+- 当前已是 **V1.2.0**：使用 `DeadTown-V1.2.1-update.zip`。
+- 其他版本或不确定版本：使用 `DeadTown-V1.2.1.zip` 完整版。
 
-上传更新包中的全部文件，包括 `assets/audio-bank.js`、四个 `assets/audio/` 下的 WAV、`package.json`、`package-lock.json` 和 `version.js`。只传 WAV 不会生效，只改前端版本会导致联机版本不一致。
+解压后进入 `DeadTown` 文件夹，把里面的文件与文件夹上传到仓库根目录并提交。不要上传 ZIP 本身，也不要再套一层 `DeadTown`。**不需要清空仓库。** 增量包要全部上传，包含新增脚本、样式、版本文件及服务器改动；只上传前端会缺少账号接口。
 
-## 2. 保留并备份账号数据
+## 2. 备份并更新 VPS
 
-你当前 VPS 已通过 `/etc/systemd/system/deadtown.service.d/20-account-storage.conf` 设置：
+等当前对局结束、结算保存成功后，再在 Hostinger 终端执行：
+
+```bash
+install -d -m 700 /var/backups/deadtown &&
+cp -p /var/lib/deadtown/accounts.json "/var/backups/deadtown/accounts-$(date +%Y%m%d-%H%M%S).json" &&
+cd /opt/deadtown &&
+git pull --ff-only &&
+npm run check &&
+systemctl restart deadtown
+```
+
+这些命令先私下备份账号文件，再拉取代码、检查语法、重启服务。任一步失败都会阻止后续命令，保留报错后排查，不要强制清空仓库。重启会结束仍在运行的多人房间。
+
+**保留现有账号目录 `/var/lib/deadtown`。** 你的服务配置 `/etc/systemd/system/deadtown.service.d/20-account-storage.conf` 已设置：
 
 ```ini
 [Service]
@@ -21,29 +35,9 @@ StateDirectoryMode=0700
 Environment="DEADTOWN_DATA_DIR=/var/lib/deadtown"
 ```
 
-**保留此配置。实际数据为 `/var/lib/deadtown/accounts.json`，不在 `/opt/deadtown` 仓库内。** 本次升级不需要更改服务用户、重新建库或移回默认目录。
+不需要修改该配置、切换服务用户或新建空库。数据库和备份不可上传 GitHub。更新会给旧账号添加经济字段，按已有等级一次性补发升级代币，保留旧账号、密码、名称、头像、最高分、经验和改名冷却。皮肤所有权按新规则初始仅为 Ranger / Moss。
 
-更新前可在 VPS 私下复制账号文件作为备份；程序采用原子替换写入，复制单个 `accounts.json` 不会读到半个 JSON。停止服务后备份则能固定备份时点。以下备份命令不会停止游戏：
-
-```bash
-install -d -m 700 /var/backups/deadtown
-cp -p /var/lib/deadtown/accounts.json "/var/backups/deadtown/accounts-$(date +%Y%m%d-%H%M%S).json"
-```
-
-不要把账号数据库或备份上传 GitHub。若自己改过 `DEADTOWN_DATA_DIR`，以实际配置为准，不要凭默认路径新建空库。
-
-## 3. 更新 VPS
-
-先等对局结束、经验保存成功；重启会结束正在进行的房间。在 Hostinger VPS 终端执行：
-
-```bash
-cd /opt/deadtown &&
-git pull --ff-only &&
-npm run check &&
-systemctl restart deadtown
-```
-
-拉取或检查报错时，后续重启不会执行。保留完整报错再排查，不要用重置仓库命令掩盖本地变更。
+## 3. 检查服务
 
 ```bash
 systemctl is-active deadtown
@@ -52,27 +46,25 @@ curl -fsS http://127.0.0.1:3000/api/account
 curl -fsS http://127.0.0.1:3000/api/leaderboard
 ```
 
-应看到 `active`、版本 `1.2.0`、无登录 Cookie 时的 `{"user":null}`，以及包含 `rows` 的榜单响应。原账号、密码、头像与最高分保留；V1.1.14 已获得的账号经验与改名冷却继续保留。
+应分别看到 `active`、包含 `"version":"1.2.1"` 的健康响应、未携带登录 Cookie 时的 `{"user":null}`，以及包含 `rows` 的排行榜响应。
 
-## 4. 网页刷新与代理
+如果服务未启动，查看：
 
-打开 <https://deadtown-by-cedrrriiiccc.online>，按 Ctrl + F5。所有玩家都应刷新，确认主页 V1.2.0 后再开始新对局。
-
-账号接口已正常使用时，不需要改 Nginx。若仍遇到注册/登录来源错误，你的现有配置文件为 `/etc/nginx/conf.d/deadtown.conf`；代理 Node 3000 端口的 `location /` 应保留 WebSocket Upgrade 设置，并包含：
-
-```nginx
-proxy_set_header Host $http_host;
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-Proto $scheme;
+```bash
+journalctl -u deadtown -n 80 --no-pager
 ```
 
-修改后先 `nginx -t`，通过后再 `systemctl reload nginx`。这是之前 HTTPS 来源校验的代理要求，不要关闭账号接口的来源校验。其他 Hostinger 站点配置无需跟着修改。
+## 4. 刷新网页与试玩
 
-## 5. 试玩检查
+打开 <https://deadtown-by-cedrrriiiccc.online>，按 **Ctrl + F5**。所有玩家都应刷新到主页 **V1.2.1** 后重新进入房间。
 
-1. 刷新后主页显示 V1.2.0，原账号资料、最高分和经验保持。
-2. 单人开火使用三种新开火声，按 R 换弹使用新换弹声，正常完成后恢复弹夹。
-3. 两个浏览器进入同一多人房间，分别检查自己的开火/换弹以及听到队友的开火/换弹。
-4. 旧标签页如果提示版本不匹配，所有玩家 Ctrl + F5 后重新加入。
+1. 登录原账号，检查等级、经验和一次性补发的代币：`(等级 − 1) × 150`。
+2. 点击自己的角色形象，衣柜初始只有 Ranger / Moss；商店有 15 套蓝色独立皮肤，每套 100 代币。
+3. 购买并装备一套，刷新后仍保留；另一个未购买的配色仍锁定。房间换肤应同步给队友。
+4. 仅一人在房间时开始按钮禁用，准备不会倒计时；第二人加入后房主可开始。两人全准备仍会五秒倒计时，离开到只剩一人应取消。
+5. 正常结束单人或多人对局，检查任务进度、本局升级/任务代币；多人采用自己的分数和击杀。
+6. 主页任务为 3 简单 + 2 中等 + 1 困难，显示纽约 08:00 刷新。旧 Legacy 按钮消失。
 
-音效说明见 [AUDIO-UPDATE.md](AUDIO-UPDATE.md)，本地验证见 [AUDIO-V1.2.0.md](verification/AUDIO-V1.2.0.md)。此包未代为上传 GitHub 或重启你的 VPS。
+账号接口之前已正常使用时无需修改 Nginx。现有 `/etc/nginx/conf.d/deadtown.conf` 应继续保留 WebSocket Upgrade 和 `Host $http_host`、`X-Real-IP $remote_addr`、`X-Forwarded-Proto $scheme` 代理头。
+
+完整规则见 [ECONOMY.md](ECONOMY.md)，验证见 [ECONOMY-V1.2.1.md](verification/ECONOMY-V1.2.1.md)。发布包未代为上传 GitHub，也未重启你的 VPS。

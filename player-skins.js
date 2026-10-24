@@ -13,32 +13,14 @@ const PlayerSkins=(()=>{
   function normalize(value){const skinId=skins.some(s=>s.id===value?.skinId)?value.skinId:'ranger';return {skinId,colorId:Number.isInteger(value?.colorId)&&value.colorId>=0&&value.colorId<4?value.colorId:0};}
   function key(value){const a=normalize(value);return a.skinId+'/'+a.colorId;}
   function palette(value){const a=normalize(value),s=skins.find(s=>s.id===a.skinId),c=s.colors[a.colorId];return {skin:'#c7a486',light:'#e0c5a1',shade:'#826956',coat:c[2],trim:c[3],dark:c[4],pants:c[5],accent:c[6]};}
-  let savedPreferences=null;
-  function preferences(){
-    if(savedPreferences)return savedPreferences;
-    let value={};try{value=JSON.parse(localStorage.getItem('dead_town_appearance')||'{}')||{};}catch{}
-    const a=normalize(value),colorsBySkin={};
-    for(const s of skins){const c=value.colorsBySkin?.[s.id];colorsBySkin[s.id]=Number.isInteger(c)&&c>=0&&c<4?c:0;}
-    // Migrate the previous single appearance without recoloring other characters.
-    colorsBySkin[a.skinId]=a.colorId;
-    return savedPreferences={...a,colorsBySkin};
-  }
-  function load(){return normalize(preferences());}
-  function save(value){
-    const a=normalize(value);savedPreferences={...a,colorsBySkin:{...preferences().colorsBySkin,[a.skinId]:a.colorId}};
-    try{localStorage.setItem('dead_town_appearance',JSON.stringify(savedPreferences));}catch{}
-    return a;
-  }
-  function remembered(skinId,value=load()){
-    const a=normalize(value),id=normalize({skinId}).skinId;
-    return {skinId:id,colorId:id===a.skinId?a.colorId:preferences().colorsBySkin[id]};
-  }
+  // Ownership and equipped appearance now belong to the signed-in account.
+  // Old browser-local selections never unlock a paid skin.
+  function load(){return normalize(typeof Accounts!=='undefined'?Accounts.user?.equippedSkin:null);}
+  function save(){return load();}
   function label(value,language='en'){const a=normalize(value),s=skins.find(s=>s.id===a.skinId);return (language==='zh'?s.zh:s.en)+' / '+s.colors[a.colorId][language==='zh'?0:1];}
-  function markup(value){const a=normalize(value),zh=lang==='zh',selected=skins.find(s=>s.id===a.skinId);
-    return `<section class="skinPicker" aria-label="${zh?'选择角色与配色':'Character and color'}"><div class="skinHeading"><span class="label">${zh?'角色外观':'SURVIVOR APPEARANCE'}</span><small>${zh?'纯外观 · 单人 / 多人通用':'COSMETIC · SOLO + CO-OP'}</small></div><div class="skinChoices">${skins.map(s=>`<button type="button" class="skinChoice ${s.id===a.skinId?'selected':''}" data-skin="${s.id}" aria-pressed="${s.id===a.skinId}"><canvas width="72" height="84" data-skin-preview="${s.id}" aria-hidden="true"></canvas><strong>${zh?s.zh:s.en}</strong></button>`).join('')}</div><div class="skinPalette">${selected.colors.map((c,i)=>`<button type="button" data-skin-color="${i}" class="skinSwatch ${i===a.colorId?'selected':''}" aria-pressed="${i===a.colorId}" title="${c[zh?0:1]}" aria-label="${c[zh?0:1]}"><i style="background:${c[2]};border-color:${c[3]}"></i><span>${c[zh?0:1]}</span></button>`).join('')}</div><p class="skinNote">${selected.note[zh?0:1]}</p></section>`;
-  }
-  function paint(root,value){const a=normalize(value);for(const canvas of root.querySelectorAll('[data-skin-preview]')){const c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);c.imageSmoothingEnabled=false;c.drawImage(PixelArt.sprite('player','idle',0,0,0,false,remembered(canvas.dataset.skinPreview,a)),0,0,72,84);}}
-  function bind(root,value,onChange){let a=normalize(value);paint(root,a);for(const b of root.querySelectorAll('[data-skin]'))b.onclick=()=>{a=save(remembered(b.dataset.skin,a));onChange(a);};for(const b of root.querySelectorAll('[data-skin-color]'))b.onclick=()=>{a=save({...a,colorId:Number(b.dataset.skinColor)});onChange(a);};}
+  function markup(){return typeof EconomyUI!=='undefined'?EconomyUI.profile():'';}
+  function paint(root){if(typeof EconomyUI!=='undefined')EconomyUI.paint(root);}
+  function bind(root){if(typeof EconomyUI!=='undefined')EconomyUI.bind(root);}
   return {skins,normalize,key,palette,load,save,label,markup,paint,bind};
 })();
 if(typeof module!=='undefined'&&module.exports)module.exports=PlayerSkins;
