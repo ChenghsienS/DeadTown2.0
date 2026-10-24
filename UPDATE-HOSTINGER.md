@@ -1,14 +1,14 @@
-# V1.1.13 → V1.1.14 更新
+# V1.1.14 → V1.2.0 更新
 
-本版加入账号等级、单人/多人结算经验条和 72 小时改名冷却。前端、服务器与新增文件必须一起更新。无新增生产依赖，无须 Supabase SQL 或重新注册账号。
+本版替换你提供的三种霰弹枪开火声和一种换弹声，实际内嵌音效库同步更新。前后端版本必须一起更新。无新增生产依赖，无须 Supabase SQL 或重新注册账号。
 
 ## 1. 上传 GitHub
 
-打开 <https://github.com/ChenghsienS/DeadTown2.0>。从 V1.1.13 升级可用 `DeadTown-V1.1.14-update.zip`；仓库版本不明或需要重传全部文件时，使用 `DeadTown-V1.1.14.zip` 完整版。
+打开 <https://github.com/ChenghsienS/DeadTown2.0>。从 V1.1.14 升级可用 `DeadTown-V1.2.0-update.zip`；如果仍在 V1.1.13、更早版本，或者版本不明，使用 `DeadTown-V1.2.0.zip` 完整版。
 
 解压并进入 `DeadTown` 文件夹，将里面的文件与文件夹上传到仓库根目录并提交。不要上传 ZIP 本身，也不要在仓库根目录再套一层 `DeadTown`。本次更新不需要清空仓库。
 
-新增 `account-progress.js` 与 `progression-ui.js`，以及修改后的账号、排行榜、联机、服务器文件必须全部上传；不能只上传这两个新文件。
+上传更新包中的全部文件，包括 `assets/audio-bank.js`、四个 `assets/audio/` 下的 WAV、`package.json`、`package-lock.json` 和 `version.js`。只传 WAV 不会生效，只改前端版本会导致联机版本不一致。
 
 ## 2. 保留并备份账号数据
 
@@ -52,11 +52,11 @@ curl -fsS http://127.0.0.1:3000/api/account
 curl -fsS http://127.0.0.1:3000/api/leaderboard
 ```
 
-应看到 `active`、版本 `1.1.14`、无登录 Cookie 时的 `{"user":null}`，以及包含 `rows` 的榜单响应。原账号、密码、头像与最高分保留；已有账号第一次加载本版为 1 级、0 XP。
+应看到 `active`、版本 `1.2.0`、无登录 Cookie 时的 `{"user":null}`，以及包含 `rows` 的榜单响应。原账号、密码、头像与最高分保留；V1.1.14 已获得的账号经验与改名冷却继续保留。
 
 ## 4. 网页刷新与代理
 
-打开 <https://deadtown-by-cedrrriiiccc.online>，按 Ctrl + F5。所有玩家都应刷新，确认主页 V1.1.14 后再开始新对局。
+打开 <https://deadtown-by-cedrrriiiccc.online>，按 Ctrl + F5。所有玩家都应刷新，确认主页 V1.2.0 后再开始新对局。
 
 账号接口已正常使用时，不需要改 Nginx。若仍遇到注册/登录来源错误，你的现有配置文件为 `/etc/nginx/conf.d/deadtown.conf`；代理 Node 3000 端口的 `location /` 应保留 WebSocket Upgrade 设置，并包含：
 
@@ -70,10 +70,9 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 ## 5. 试玩检查
 
-1. 登录原账号，确认原名称、头像和最高分保留，主页显示 LV. 1 与 0 / 500 XP。
-2. 正常完成一局，结算出现本局经验增长条；例：5,100 分应为 +510 XP，升至 2 级并保留 10 / 605 XP。
-3. 两个账号完成合作局，各自按个人最终分数获得经验，团队总分不重复发给每个人；刷新后等级仍保留。
-4. 成功改名后再次打开资料，名称显示等待时间、头像仍可改；每次改名之后需等待 72 小时。
-5. 中途退出不发经验。游客仍可游玩；原圈内移动救援、头像、皮肤和聊天继续使用。
+1. 刷新后主页显示 V1.2.0，原账号资料、最高分和经验保持。
+2. 单人开火使用三种新开火声，按 R 换弹使用新换弹声，正常完成后恢复弹夹。
+3. 两个浏览器进入同一多人房间，分别检查自己的开火/换弹以及听到队友的开火/换弹。
+4. 旧标签页如果提示版本不匹配，所有玩家 Ctrl + F5 后重新加入。
 
-完整成长规则见 [PROGRESSION.md](PROGRESSION.md)，本地验证见 [PROGRESSION-V1.1.14.md](verification/PROGRESSION-V1.1.14.md)。此包未代为上传 GitHub 或重启你的 VPS。
+音效说明见 [AUDIO-UPDATE.md](AUDIO-UPDATE.md)，本地验证见 [AUDIO-V1.2.0.md](verification/AUDIO-V1.2.0.md)。此包未代为上传 GitHub 或重启你的 VPS。

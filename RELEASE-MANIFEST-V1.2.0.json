@@ -1,0 +1,82 @@
+{
+  "version": "1.2.0",
+  "baseVersion": "1.1.14",
+  "checks": {
+    "standard": 146,
+    "browserAudio": 6
+  },
+  "checksTotal": 152,
+  "browser": "Chromium 153.0.8010.0",
+  "deployed": false,
+  "deletedFiles": [],
+  "changedFilesExcludingManifest": [
+    {
+      "path": "AUDIO-UPDATE.md",
+      "sha256": "4e8b95503621c18847d21c79f7e5098fc5b9cebc2105cefe10b7bae9a529c90a"
+    },
+    {
+      "path": "MULTIPLAYER-README.md",
+      "sha256": "1e05e8f6e8a3fc58da3a9a6dbaf80c0fcee0dc9a132645f6f7bb591d8b3834da"
+    },
+    {
+      "path": "README.md",
+      "sha256": "0d89b061913dba19146dabd523ef76132ebc5510a2be8693c2ca4cc249f70d98"
+    },
+    {
+      "path": "UPDATE-HOSTINGER.md",
+      "sha256": "f9e64582eaabb38a4e7d83d8d937668a7c6830f542f5012aa03e32917100ba09"
+    },
+    {
+      "path": "assets/audio-bank.js",
+      "sha256": "0d93de64460152206498cfb9cd241380f24e91e117345f8e526cd0ece6ed20ff"
+    },
+    {
+      "path": "assets/audio/reload_shotgun.wav",
+      "sha256": "d62f95dcd6dcfd7e82e84bb5284ec12904f93c2b7860d406fab4829c98acc4f7"
+    },
+    {
+      "path": "assets/audio/shotgun_1.wav",
+      "sha256": "b5d2b23a0cb2ec8c1d79e6f5d783c88337f6b2e954d57bca62f8ecb8cfa3756e"
+    },
+    {
+      "path": "assets/audio/shotgun_2.wav",
+      "sha256": "4a0fa81f5cceb964ed5fc6c6fc0de189d7a6490bb1a004f2b81b423f052572b3"
+    },
+    {
+      "path": "assets/audio/shotgun_3.wav",
+      "sha256": "c5ca7ee327e528bd9a382ed08fe901e9346b56dcd0fb70de61ebd924c95f796d"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "aca0810a075447e3dc2674dc8be69ca6dbcbe4d1af30ab68912eb3538f623a4d"
+    },
+    {
+      "path": "package.json",
+      "sha256": "3891114bebb9fdcfbdccda8d1d470ad312b0996126a5ebfa7b8596d8b98f4752"
+    },
+    {
+      "path": "verification/AUDIO-IMPORT-V1.2.0.json",
+      "sha256": "8b4ee1b6f5bde1a53681e72433a304bf941995cb40ea887fd5ba939854978c9c"
+    },
+    {
+      "path": "verification/AUDIO-V1.2.0.md",
+      "sha256": "8fda229d4049ee6bcd037303c5494cf5c6ac14cfe2222ec2e09dc77eff56c9e7"
+    },
+    {
+      "path": "verification/audio-browser-V1.2.0.log",
+      "sha256": "d0b359d180e4a6bd58fe186a82c619ff769cdc5858dba9e5234ff8449bd1bf3b"
+    },
+    {
+      "path": "verification/standard-tests-V1.2.0.log",
+      "sha256": "1fc2fdab5f2b385912a62a17b52eca78172cb47c37e5b77349e535aaff160987"
+    },
+    {
+      "path": "verification/syntax-check-V1.2.0.log",
+      "sha256": "3d9c91bdbbf88d672f7df4992b4537fdc6016c8759be4d87f51d3a0b4dbc912b"
+    },
+    {
+      "path": "version.js",
+      "sha256": "ea3e941d993ea2c682b6aa0ba2a44ccfc0367c2ba7d4129d4570e4c3accffc4e"
+    }
+  ]
+}

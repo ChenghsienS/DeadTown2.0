@@ -1,6 +1,6 @@
 {
   "name": "deadtown",
-  "version": "1.1.14",
+  "version": "1.2.0",
   "private": true,
   "description": "Dead Town pixel survival: offline solo and self-hosted authoritative co-op",
   "scripts": {
