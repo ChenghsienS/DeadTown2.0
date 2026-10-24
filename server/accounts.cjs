@@ -3,11 +3,12 @@ const fs=require('node:fs'),fsp=fs.promises,path=require('node:path'),os=require
 const {randomBytes,randomUUID,createHash,scrypt,timingSafeEqual}=require('node:crypto');
 const {promisify}=require('node:util');
 const Rules=require('../account-rules.js');
+const Progress=require('../account-progress.js');
 const derive=promisify(scrypt),SESSION_MS=7*86400000,RUN_MS=86400000;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const fault=(code,status=400)=>Object.assign(new Error(code),{code,status});
 const empty=()=>({schema:1,users:[],sessions:[],runs:[]});
-const summary=u=>({id:u.id,username:u.username,displayName:u.displayName,avatarId:u.avatarId,bestScore:u.bestScore||0});
+const summary=(u,now=Date.now())=>({id:u.id,username:u.username,displayName:u.displayName,avatarId:u.avatarId,bestScore:u.bestScore||0,...Progress.info(u.totalXp),nameChangeAvailableAt:u.nameChangedAt?u.nameChangedAt+Progress.RENAME_MS:0,serverTime:now});
 class AccountStore{
   constructor({directory=process.env.DEADTOWN_DATA_DIR||path.join(os.homedir(),'.local','share','deadtown'),now=Date.now}={}){
     this.directory=path.resolve(directory);this.file=path.join(this.directory,'accounts.json');this.lock=path.join(this.directory,'accounts.lock');this.now=now;this.data=empty();this.queue=Promise.resolve();this.opened=false;this.busy=0;this.closed=false;
@@ -47,7 +48,7 @@ class AccountStore{
   session(token){
     if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))return null;this.open();
     const s=this.data.sessions.find(s=>s.tokenHash===hash(token)&&s.expires>this.now());
-    const u=s&&this.data.users.find(u=>u.id===s.userId);return u?summary(u):null;
+    const u=s&&this.data.users.find(u=>u.id===s.userId);return u?summary(u,this.now()):null;
   }
   async password(password,salt){
     if(this.busy>=3)throw fault('busy',429);this.busy++;
@@ -59,7 +60,7 @@ class AccountStore{
     const keep=new Set(own.slice(0,4).map(s=>s.tokenHash));
     data.sessions=data.sessions.filter(s=>s.userId!==user.id||keep.has(s.tokenHash));
     data.sessions.push({tokenHash:hash(token),userId:user.id,expires:this.now()+SESSION_MS});
-    return {user:summary(user),token};
+    return {user:summary(user,this.now()),token};
   }
   async register(fields,previousToken){
     const error=Rules.validate(fields);if(error)throw fault(error);this.open();
@@ -67,7 +68,7 @@ class AccountStore{
     const salt=randomBytes(16).toString('hex'),passwordHash=(await this.password(fields.password,salt)).toString('hex');
     return this.change(data=>{
       if(data.users.some(u=>u.key===key))throw fault('username_taken',409);
-      const u={id:randomUUID(),key,username:fields.username,displayName:Rules.displayName(fields.displayName),avatarId:fields.avatarId,salt,passwordHash,bestScore:0,created:this.now()};
+      const u={id:randomUUID(),key,username:fields.username,displayName:Rules.displayName(fields.displayName),avatarId:fields.avatarId,salt,passwordHash,bestScore:0,totalXp:0,nameChangedAt:0,created:this.now()};
       data.users.push(u);if(previousToken)data.sessions=data.sessions.filter(s=>s.tokenHash!==hash(previousToken));return this.newSession(data,u);
     });
   }
@@ -83,31 +84,65 @@ class AccountStore{
   async logout(token){if(!token)return;return this.change(data=>{data.sessions=data.sessions.filter(s=>s.tokenHash!==hash(token));});}
   async profile(token,fields){
     const error=Rules.validate(fields,false);if(error)throw fault(error);
-    return this.change(data=>{const user=this.session(token);if(!user)throw fault('auth_required',401);const u=data.users.find(u=>u.id===user.id);u.displayName=Rules.displayName(fields.displayName);u.avatarId=fields.avatarId;return summary(u);});
+    return this.change(data=>{
+      const user=this.session(token);if(!user)throw fault('auth_required',401);const u=data.users.find(u=>u.id===user.id),name=Rules.displayName(fields.displayName),now=this.now();
+      if(name!==u.displayName){
+        const availableAt=u.nameChangedAt?u.nameChangedAt+Progress.RENAME_MS:0;
+        if(now<availableAt)throw Object.assign(fault('name_cooldown',409),{availableAt,serverTime:now});
+        u.displayName=name;u.nameChangedAt=now;
+      }
+      u.avatarId=fields.avatarId;return summary(u,now);
+    });
   }
-  leaderboard(){this.open();return this.data.users.filter(u=>u.bestScore>0).sort((a,b)=>b.bestScore-a.bestScore||a.bestAt-b.bestAt||a.id.localeCompare(b.id)).slice(0,10).map(u=>({accountId:u.id,player_name:u.displayName,avatarId:u.avatarId,best_score:u.bestScore,updated_at:new Date(u.bestAt).toISOString()}));}
+  leaderboard(){this.open();return this.data.users.filter(u=>u.bestScore>0).sort((a,b)=>b.bestScore-a.bestScore||a.bestAt-b.bestAt||a.id.localeCompare(b.id)).slice(0,10).map(u=>({accountId:u.id,player_name:u.displayName,avatarId:u.avatarId,level:Progress.info(u.totalXp).level,best_score:u.bestScore,updated_at:new Date(u.bestAt).toISOString()}));}
   async beginRun(token,accountId){
     return this.change(data=>{
       const u=this.session(token);if(!u)throw fault('auth_required',401);
       if(accountId&&accountId!==u.id)throw fault('account_changed',409);
       const keep=new Set(data.runs.filter(r=>r.userId===u.id).sort((a,b)=>b.started-a.started).slice(0,127).map(r=>r.id));
       data.runs=data.runs.filter(r=>r.userId!==u.id||keep.has(r.id));const runId=randomBytes(24).toString('hex');
-      data.runs.push({id:runId,userId:u.id,started:this.now(),expires:this.now()+RUN_MS,finished:false});return {runId,accountId:u.id};
+      data.runs.push({id:runId,userId:u.id,mode:'solo',started:this.now(),expires:this.now()+RUN_MS,finished:false});return {runId,accountId:u.id};
     });
   }
-  async finishRun(token,{accountId,runId,score,duration,developer}){
+  async finishRun(token,{accountId,runId,score,duration,developer,completed}){
     if(!Number.isSafeInteger(score)||score<0||score>100000000||!Number.isFinite(duration)||duration<0||duration>86400||developer!==false)throw fault('invalid_score');
     return this.change(data=>{
       const user=this.session(token);if(!user)throw fault('auth_required',401);
       if(accountId!==user.id)throw fault('account_changed',409);
       const run=data.runs.find(r=>r.id===runId&&r.userId===user.id);if(!run)throw fault('run_invalid',409);
+      if(run.mode==='coop')throw fault('run_invalid',409);
+      if(run.mode==='solo'&&completed!==true)throw fault('run_incomplete',400);
       if(duration>(this.now()-run.started)/1000+5)throw fault('invalid_score');
       const u=data.users.find(u=>u.id===user.id);
-      if(run.finished){if(run.score!==score)throw fault('run_invalid',409);return summary(u);}
-      run.finished=true;run.score=score;
+      if(run.finished){if(run.score!==score||(run.duration!==undefined&&run.duration!==duration))throw fault('run_invalid',409);return {user:summary(u,this.now()),reward:run.reward||null};}
+      run.finished=true;run.score=score;run.duration=duration;
       if(score>u.bestScore){u.bestScore=score;u.bestAt=this.now();}
-      return summary(u);
+      // Pre-upgrade queued runs retain their ranking, but never invent old XP.
+      if(run.mode==='solo')run.reward=this.award(u,runId,'solo',score);
+      return {user:summary(u,this.now()),reward:run.reward||null};
     });
+  }
+  award(user,id,mode,score){
+    const reward={id,accountId:user.id,mode,score,...Progress.reward(user.totalXp,score),completedAt:this.now()};
+    user.totalXp=reward.afterXp;return reward;
+  }
+  // Internal only: the authoritative room worker supplies final personal scores.
+  async finishCoop(matchId,entries){
+    if(typeof matchId!=='string'||!/^[a-f0-9]{48}$/.test(matchId))throw fault('run_invalid',409);
+    const scores=new Map();
+    for(const entry of entries){
+      if(typeof entry.accountId!=='string'||!Number.isSafeInteger(entry.score)||entry.score<0||entry.score>100000000)throw fault('invalid_score');
+      scores.set(entry.accountId,Math.max(scores.get(entry.accountId)||0,entry.score));
+    }
+    if(!scores.size)return [];
+    return this.change(data=>[...scores].flatMap(([accountId,score])=>{
+      const user=data.users.find(u=>u.id===accountId);if(!user)return [];
+      const id='coop:'+matchId+':'+accountId,existing=data.runs.find(r=>r.id===id);
+      if(existing){if(existing.score!==score)throw fault('run_invalid',409);return [{user:summary(user,this.now()),reward:existing.reward}];}
+      const reward=this.award(user,matchId,'coop',score);
+      data.runs.push({id,userId:accountId,mode:'coop',score,finished:true,reward,started:this.now(),expires:this.now()+RUN_MS});
+      return [{user:summary(user,this.now()),reward}];
+    }));
   }
   async close(){await this.queue;this.closed=true;if(this.opened){fs.closeSync(this.fd);fs.unlinkSync(this.lock);this.opened=false;}}
 }
@@ -153,9 +188,9 @@ function createAccountAPI(store,{changed=()=>{},signedOut=()=>{},signedIn=()=>{}
       const user=store.session(token);if(!user)throw fault('auth_required',401);
       if(method==='PATCH'&&route==='/api/profile'){const updated=await store.profile(token,fields);changed(updated);return reply(200,{user:updated});}
       if(method==='POST'&&route==='/api/runs'){limit('run:'+user.id,12,60000);return reply(201,await store.beginRun(token,fields.accountId));}
-      if(method==='POST'&&route==='/api/scores'){const updated=await store.finishRun(token,fields);return reply(200,{user:updated});}
+      if(method==='POST'&&route==='/api/scores'){const result=await store.finishRun(token,fields);changed(result.user);return reply(200,result);}
       throw fault('not_found',404);
-    }catch(e){if(!e.status)console.error('Account storage error:',e.message);if(!res.headersSent)reply(e.status||503,{error:e.status?e.code:'service_unavailable'});else res.end();}
+    }catch(e){if(!e.status)console.error('Account storage error:',e.message);if(!res.headersSent)reply(e.status||503,{error:e.status?e.code:'service_unavailable',...(e.code==='name_cooldown'?{availableAt:e.availableAt,serverTime:e.serverTime}:{})});else res.end();}
   };
 }
 module.exports={AccountStore,createAccountAPI,cookieToken,sameOrigin,SESSION_MS};
