@@ -1,0 +1,140 @@
+{
+  "version": "1.2.2",
+  "baseVersion": "1.2.1",
+  "checks": {
+    "standard": 176,
+    "native": 17,
+    "browserAccounts": 11,
+    "browserProgression": 11,
+    "browserEconomy": 19,
+    "browserUI": 12
+  },
+  "checksTotal": 246,
+  "browser": "Chromium 153.0.8010.0",
+  "deployed": false,
+  "authorAvatarSha256": "beb66734f83b51b85ff4308b5402cfd812a79877bad5573d7bac6584e8f1f9c2",
+  "originalAssetsUnchanged": true,
+  "changedFilesExcludingManifest": [
+    {
+      "path": "MULTIPLAYER-README.md",
+      "sha256": "0c839583af462d489bc392137ce4f4e70bf40bfcbdde7be36ec5df9cf15f0d79"
+    },
+    {
+      "path": "README.md",
+      "sha256": "2addefd620d31e3e288fd072145dba078ddc1085c18eecabcd6c2d88ceaa74f4"
+    },
+    {
+      "path": "UI-DEVELOPER.md",
+      "sha256": "22b689731d9b4c004b81ac494e4571e594c660dfc4dbcedd4cc4e67dcf4de354"
+    },
+    {
+      "path": "UPDATE-HOSTINGER.md",
+      "sha256": "e41c748438c13eb2eaa0612ac1f68dc909cb30f6ca956b38a69eec3128096474"
+    },
+    {
+      "path": "accounts.js",
+      "sha256": "506c2b225c5b57b0881ded90309c28457ed6cd723fa0cfbff3e22404205c2d30"
+    },
+    {
+      "path": "art-studio.js",
+      "sha256": "49c20e08b370568c6d383c421fb9ba4077ec297dcddd6afb107d088df2ea947a"
+    },
+    {
+      "path": "developer-ui.js",
+      "sha256": "700940b69a51378494cafe2ea5bac8bba9f7941683d92599c217cce300599080"
+    },
+    {
+      "path": "economy-ui.js",
+      "sha256": "40f195fcff7328e118cc270f589797fc3427d7cc5c689c335390e9b2147c10f4"
+    },
+    {
+      "path": "economy.css",
+      "sha256": "5dd182691d66d81033f56e9556fbaa96f7a053cfc26178ae3ade454f5ade4ca6"
+    },
+    {
+      "path": "game.js",
+      "sha256": "fa82107f0979e4692328b18e098f79cb109be7800551116e82194276d6e99259"
+    },
+    {
+      "path": "index.html",
+      "sha256": "bdd114bf289da78cfd026d4a98b3d45e5db52ad15fea3f15b4a4b4963232d7e8"
+    },
+    {
+      "path": "network.js",
+      "sha256": "1e195dcfb6de713f9e2c19b2fbc9fc2303cb372ae971e5dfadf1257bb8619c56"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "01df47138832671d93bb7cab5a0c43d7f70b742f4204fd19666ee60d017bbb54"
+    },
+    {
+      "path": "package.json",
+      "sha256": "f023b8ddbd213eb87509628edfe309633d3e1907f7419b5095a9bc10f9b0d2aa"
+    },
+    {
+      "path": "server/accounts.cjs",
+      "sha256": "becc10d9e965950fc1b7559cdc2eb3b2b3029fee3823d0f607d1163a84fb4eb7"
+    },
+    {
+      "path": "tests/browser-accounts.cjs",
+      "sha256": "2b4f281f0ab1c49616783c15a941a50c78a33066898ec91d38cb6ac56787cf38"
+    },
+    {
+      "path": "tests/browser-economy.cjs",
+      "sha256": "b4717a4b0210ae522639a7f5cbd8a1f59d5cb423167b8b269bf289903b8ae69c"
+    },
+    {
+      "path": "tests/browser-ui.cjs",
+      "sha256": "b17d51e9df8c57b01ffb58095a02924087d7fca8706b21629b38c70371494eef"
+    },
+    {
+      "path": "tests/developer.cjs",
+      "sha256": "01be7ddec69e1642b6cd79bea0243331ddb6c24bf0c092aba38cbe0da01f80d0"
+    },
+    {
+      "path": "tests/loading.cjs",
+      "sha256": "43d03e07465a0ab3bbc8612abcf0b2a10cdddcbcb8fd3812331e073e5cda7a1a"
+    },
+    {
+      "path": "ui-icons.js",
+      "sha256": "2175ee4ab5f28b053f266163bd8ae9b524519f2641a1214900d0c0265772e996"
+    },
+    {
+      "path": "verification/UI-V1.2.2.md",
+      "sha256": "861c68cbd9be50bf87e8461309d1c93ede23b563dcd92dff7a09d2011d2f6f07"
+    },
+    {
+      "path": "verification/browser-accounts-V1.2.2.log",
+      "sha256": "fd3076715d97da98997700010bb5fe3e35eb1c300b1b2d812ac30492479519bc"
+    },
+    {
+      "path": "verification/browser-economy-V1.2.2.log",
+      "sha256": "533fc25ca71a2be088db353c7aa15400617b6179f16d0c64a084838a8b501c0f"
+    },
+    {
+      "path": "verification/browser-progression-V1.2.2.log",
+      "sha256": "b6199eb9c93452fa2cfec74c7c615d0b62bf6ecae91f4c46ceac39d23eb254d9"
+    },
+    {
+      "path": "verification/browser-ui-V1.2.2.log",
+      "sha256": "ffe76e2612cb3a8c0f0abe4453bd6d51f6394d80b9c3f634d39cbb8132d455c0"
+    },
+    {
+      "path": "verification/native-tests-V1.2.2.log",
+      "sha256": "60ab7dd7725cbe4406566ed2e553367a27849d8235923f5d443f889a46a7c143"
+    },
+    {
+      "path": "verification/standard-tests-V1.2.2.log",
+      "sha256": "057bbcafa9b8bfa28031f975aaa482036b07a4e19fa8ba89d228c0e13250c2f9"
+    },
+    {
+      "path": "verification/syntax-check-V1.2.2.log",
+      "sha256": "bc4ff92695365d9d491c78dc9a27f11cd0c06a01793c168b34cd497e0bfbd2b0"
+    },
+    {
+      "path": "version.js",
+      "sha256": "6196bdadef39fc5a1e72b53ee34e01c6ba42ff6ac75a9791499cc0bc031d6649"
+    }
+  ],
+  "deletedFiles": []
+}

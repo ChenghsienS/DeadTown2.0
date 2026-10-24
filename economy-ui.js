@@ -5,9 +5,10 @@ const EconomyUI=(()=>{
   const owned=id=>!!Accounts.user?.ownedSkins?.includes(id);
   const equipped=()=>PlayerSkins.key(Accounts.user?.equippedSkin);
   function tokenText(value){return `${number(value)} ${tr('代币','TOKENS')}`;}
+  function balance(value,extra=''){return `<strong class="tokenBalance ${extra}" data-token-balance>${UIIcons.markup('coin')}<span data-token-value>${tokenText(value)}</span></strong>`;}
   function profile(){
     const u=Accounts.user;if(!u)return '';
-    return `<section class="survivorDossier"><button type="button" class="survivorPreview" data-wardrobe aria-label="${tr('打开更换皮肤界面','Open wardrobe')}"><canvas width="108" height="126" data-outfit="${equipped()}" aria-hidden="true"></canvas><span><small class="eyebrow">${tr('个人形象','SURVIVOR DOSSIER')}</small><strong>${escapeHtml(u.displayName)}</strong><small>${PlayerSkins.label(u.equippedSkin,lang)}</small><b>${tr('更换皮肤','CHANGE SKIN')} ↗</b></span></button><div class="dossierBottom"><strong class="tokenBalance" data-token-balance>${tokenText(u.tokens)}</strong><button type="button" data-shop>${tr('商店','Shop')} →</button></div></section>`;
+    return `<div class="survivorProfile"><section class="survivorDossier"><div class="survivorPreview"><canvas width="108" height="126" data-outfit="${equipped()}" aria-hidden="true"></canvas><span><small class="eyebrow">${tr('个人形象','SURVIVOR DOSSIER')}</small><strong>${escapeHtml(u.displayName)}</strong><small>${PlayerSkins.label(u.equippedSkin,lang)}</small></span><button type="button" class="wardrobeIconButton" data-wardrobe title="${tr('更换皮肤','Change skin')}" aria-label="${tr('更换皮肤','Change skin')}">${UIIcons.markup('shirt')}</button></div></section><button type="button" class="supplyShopButton" data-shop><span>${UIIcons.markup('shop')}${tr('商店','SHOP')}</span><span class="arrow" aria-hidden="true">→</span></button></div>`;
   }
   function paint(root=document){
     for(const canvas of root.querySelectorAll('[data-outfit]')){
@@ -54,7 +55,7 @@ const EconomyUI=(()=>{
     const u=Accounts.user;if(!u){if(menuDialog?.kind==='cosmetics')closeMenuDialog();return;}
     const overlay=$('dialogOverlay'),oldScroll=overlay.querySelector('.cosmeticGrid')?.scrollTop||0;
     const items=tab==='shop'?AccountEconomy.catalog.filter(s=>s.price>0):AccountEconomy.catalog.filter(s=>owned(s.id));
-    overlay.innerHTML=`<section class="dialogCard cosmeticDialog" role="dialog" aria-modal="true" aria-labelledby="cosmeticsTitle"><div class="accountDialogTop"><span class="eyebrow">DEAD TOWN / QUARTERMASTER</span><button type="button" id="cosmeticsClose" class="quiet" aria-label="${tr('关闭','Close')}">×</button></div><div class="cosmeticHeading"><h2 id="cosmeticsTitle">${tab==='shop'?tr('补给商店','Supply shop'):tr('更换皮肤','Your wardrobe')}</h2><strong class="tokenBalance" data-token-balance>${tokenText(u.tokens)}</strong></div><p class="cosmeticIntro">${tr('每套配色都是独立皮肤。蓝色品质 100 代币；每升一级获得 150 代币。','Each color is a separate skin. Blue rarity costs 100 tokens; every level-up grants 150 tokens.')}</p><nav class="accountTabs"><button type="button" data-cosmetic-tab="wardrobe" aria-pressed="${tab==='wardrobe'}">${tr('已拥有','Owned')} (${u.ownedSkins.length})</button><button type="button" data-cosmetic-tab="shop" aria-pressed="${tab==='shop'}">${tr('商店','Shop')} (15)</button></nav><p class="cosmeticMessage" id="cosmeticMessage" role="status">${escapeHtml(message||tr('外观与代币跟随账号保存，单人 / 多人通用。','Your account saves skins and tokens across solo and co-op.'))}</p><div class="cosmeticGrid">${items.map(s=>{
+    overlay.innerHTML=`<section class="dialogCard cosmeticDialog" role="dialog" aria-modal="true" aria-labelledby="cosmeticsTitle"><div class="accountDialogTop"><span class="eyebrow">DEAD TOWN / QUARTERMASTER</span><button type="button" id="cosmeticsClose" class="quiet" aria-label="${tr('关闭','Close')}">×</button></div><div class="cosmeticHeading"><h2 id="cosmeticsTitle">${tab==='shop'?tr('补给商店','Supply shop'):tr('更换皮肤','Your wardrobe')}</h2>${balance(u.tokens)}</div><p class="cosmeticIntro">${tr('每套配色都是独立皮肤。蓝色品质 100 代币；每升一级获得 150 代币。','Each color is a separate skin. Blue rarity costs 100 tokens; every level-up grants 150 tokens.')}</p><nav class="accountTabs"><button type="button" data-cosmetic-tab="wardrobe" aria-pressed="${tab==='wardrobe'}">${tr('已拥有','Owned')} (${u.ownedSkins.length})</button><button type="button" data-cosmetic-tab="shop" aria-pressed="${tab==='shop'}">${tr('商店','Shop')} (15)</button></nav><p class="cosmeticMessage" id="cosmeticMessage" role="status">${escapeHtml(message||tr('外观与代币跟随账号保存，单人 / 多人通用。','Your account saves skins and tokens across solo and co-op.'))}</p><div class="cosmeticGrid">${items.map(s=>{
       const isOwned=owned(s.id),active=equipped()===s.id;
       return `<article class="cosmeticItem ${s.rarity==='blue'?'rarityBlue':'rarityStarter'} ${active?'isEquipped':''}" data-cosmetic-item="${s.id}"><div class="cosmeticArt"><span class="rarityLabel">${s.price?tr('蓝色品质','BLUE RARITY'):tr('初始皮肤','STARTER')}</span><canvas width="108" height="126" data-outfit="${s.id}" aria-hidden="true"></canvas></div><strong>${PlayerSkins.label(s,lang)}</strong><button type="button" data-cosmetic-action="${isOwned?'equip':'buy'}" data-item="${s.id}" ${busy||active||(!isOwned&&u.tokens<s.price)?'disabled':''}>${active?tr('已装备','EQUIPPED'):isOwned?tr('装备','EQUIP'):tr('购买 · 100 代币','BUY · 100 TOKENS')}</button>${!isOwned&&u.tokens<s.price?`<small>${tr('代币不足','Not enough tokens')}</small>`:''}</article>`;
     }).join('')}</div></section>`;
@@ -84,11 +85,11 @@ const EconomyUI=(()=>{
   function refresh(){
     const u=Accounts.user;if(!u)return;if(Number.isFinite(u.serverTime))offset=u.serverTime-Date.now();
     for(const el of document.querySelectorAll('[data-daily-panel]'))el.innerHTML=dailyContent();
-    for(const el of document.querySelectorAll('[data-token-balance]'))el.textContent=tokenText(u.tokens);
+    for(const el of document.querySelectorAll('[data-token-value]'))el.textContent=tokenText(u.tokens);
     if(menuDialog?.kind==='cosmetics'&&!busy)renderDialog();countdown();
   }
   function accountChanged(){if(typeof menuDialog!=='undefined'&&menuDialog?.kind==='cosmetics')closeMenuDialog();resetRetryAt=0;}
   setInterval(countdown,1000);
   addEventListener('focus',()=>{if(typeof Accounts!=='undefined'&&Accounts.user&&!state.running)Accounts.refresh().then(refresh);});
-  return {profile,paint,bind,dailyMarkup,report,open,refresh,accountChanged};
+  return {balance,profile,paint,bind,dailyMarkup,report,open,refresh,accountChanged};
 })();

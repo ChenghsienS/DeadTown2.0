@@ -30,14 +30,19 @@ const Accounts=(()=>{
   }
   messages.tokens_insufficient=['代币不足，请完成任务或升级。','Not enough tokens. Complete tasks or level up.'];
   messages.skin_invalid=['此皮肤不存在。','This skin does not exist.'];
+  messages.developer_forbidden=['当前账号没有开发者权限。','This account does not have developer access.'];
+  messages.developer_invalid=['测试数值无效，请刷新后重试。','Invalid test adjustment. Reload and retry.'];
+  messages.developer_conflict=['此操作已处理，请刷新查看最新数值。','This operation was already processed. Reload to see current values.'];
   messages.skin_locked=['请先购买这套皮肤。','Purchase this skin before equipping it.'];
   function bestKey(id=user?.id){return id?'dead_town_account_best:'+id:'dead_town_supply_v2_best';}
   let clockOffset=0;
   function mergeUser(next){
     if(!next||next.id!==user?.id)return;
-    const totalXp=Math.max(user.totalXp||0,next.totalXp||0),older=(next.economyRevision||0)<(user.economyRevision||0)||((next.economyRevision||0)===(user.economyRevision||0)&&(next.serverTime||0)<(user.serverTime||0));
+    const older=(next.economyRevision||0)<(user.economyRevision||0)||((next.economyRevision||0)===(user.economyRevision||0)&&(next.serverTime||0)<(user.serverTime||0));
+    const totalXp=older?user.totalXp:next.totalXp;
     const keep=older?Object.fromEntries(['tokens','ownedSkins','equippedSkin','economyRevision','daily','serverTime'].map(k=>[k,user[k]])):{};
     user={...user,...next,...keep,...AccountProgress.info(totalXp)};
+    if(typeof DeveloperUI!=='undefined')DeveloperUI.accountChanged();
     if(!state.running||state.gameOver)Object.assign(player,PlayerSkins.load());
     if(!older&&Number.isFinite(next.serverTime))clockOffset=next.serverTime-Date.now();epoch++;
     state.best=Math.max(state.best,user.bestScore||0);savePersonalBest();
@@ -50,6 +55,7 @@ const Accounts=(()=>{
   function setUser(next,announce=false){
     const changed=user?.id!==next?.id;user=next||null;initialized=true;epoch++;if(Number.isFinite(user?.serverTime))clockOffset=user.serverTime-Date.now();
     if(changed&&typeof Rankings!=='undefined')Rankings.cancelRun();
+    if(typeof DeveloperUI!=='undefined')DeveloperUI.accountChanged(changed);
     state.playerName=user?.displayName||AccountRules.guestName(localStorage.getItem('dead_town_player_name')||'Player');
     if(!state.running||state.gameOver)Object.assign(player,PlayerSkins.load());
     if(changed&&typeof EconomyUI!=='undefined')EconomyUI.accountChanged();
@@ -70,10 +76,10 @@ const Accounts=(()=>{
     pending=request('account').then(data=>{if(epoch===started)setUser(data.user);return user;}).catch(()=>{if(epoch===started)initialized=true;return user;}).finally(()=>{pending=null;});return pending;
   }
   function badge(){
-    if(user)return `<section class="accountBar" aria-label="${tr('当前账号','Current account')}">${AccountPortraits.markup(user.avatarId)}<div class="accountIdentity"><span class="label"><i class="signalDot"></i>${tr('已登录','SIGNED IN')}</span><strong>${escapeHtml(user.displayName)}</strong><small>@${escapeHtml(user.username)}</small>${ProgressUI.compact(user)}</div><div class="accountActions"><button type="button" data-account-action="profile">${tr('账号','Account')}</button><button type="button" class="quiet" data-account-action="logout">${tr('退出','Sign out')}</button></div></section>`;
-    return `<section class="accountBar guestBar">${AccountPortraits.markup('guest')}<div class="accountIdentity"><span class="label">${tr('游客身份','GUEST ACCESS')}</span><strong>${escapeHtml(state.playerName)}</strong><small>${tr('登录后可获得全球排名','Sign in to enter the global rankings')}</small></div><div class="accountActions"><button type="button" data-account-action="login">${tr('登录','Sign in')}</button><button type="button" class="quiet" data-account-action="register">${tr('注册','Register')}</button></div></section>`;
+    if(user)return `<section class="accountBar" aria-label="${tr('当前账号','Current account')}">${AccountPortraits.markup(user.avatarId)}<div class="accountIdentity"><span class="label"><i class="signalDot"></i>${tr('已登录','SIGNED IN')}</span><strong>${escapeHtml(user.displayName)}</strong><small>@${escapeHtml(user.username)}</small>${ProgressUI.compact(user)}${EconomyUI.balance(user.tokens,'accountWallet')}</div><div class="accountActions"><button type="button" data-account-action="profile">${tr('账号','Account')}</button><button type="button" class="quiet" data-account-action="logout">${tr('退出','Sign out')}</button></div></section>`;
+    return `<section class="accountBar guestBar">${AccountPortraits.markup('guest')}<div class="accountIdentity"><span class="label">${tr('游客身份','GUEST ACCESS')}</span><strong>${escapeHtml(state.playerName)}</strong><small>${tr('登录后可获得全球排名','Sign in to enter the global rankings')}</small>${state.overlayScreen==='main'?`<button type="button" class="guestRename quiet" data-guest-rename>${tr('修改名字','Change Name')}</button>`:''}</div><div class="accountActions"><button type="button" data-account-action="login">${tr('登录','Sign in')}</button><button type="button" class="quiet" data-account-action="register">${tr('注册','Register')}</button></div></section>`;
   }
-  function bind(root=document){for(const b of root.querySelectorAll('[data-account-action]'))b.onclick=()=>b.dataset.accountAction==='logout'?logout():open(b.dataset.accountAction);}
+  function bind(root=document){for(const b of root.querySelectorAll('[data-guest-rename]'))b.onclick=promptPlayerName;for(const b of root.querySelectorAll('[data-account-action]'))b.onclick=()=>b.dataset.accountAction==='logout'?logout():open(b.dataset.accountAction);}
   function open(mode='login',after){
     if(mode==='profile'&&!user)mode='login';const profile=mode==='profile',register=mode==='register';
     menuDialog={kind:'account',previous:document.activeElement};submitting=false;

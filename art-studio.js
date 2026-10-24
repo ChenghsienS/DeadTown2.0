@@ -35,8 +35,8 @@ const ArtStudio=(()=>{
     $('artAlpha').value=String(alpha);$('artBrush').value=String(brush);$('artStudio').addEventListener('keydown',keyboard);setTool(tool);
   }
   async function open(){
-    if(opened||opening||!state.devMode)return;opening=true;
-    try{await ArtWorkspace.init();ArtCatalog.refreshWorld();priorPaused=state.paused;if(state.running&&!state.paused)togglePause();state.keys.clear();mouseDown=false;opened=true;
+    if(opened||opening||!state.devMode||!DeveloperUI.allowed())return;opening=true;
+    try{await ArtWorkspace.init();if(!state.devMode||!DeveloperUI.allowed())return;ArtCatalog.refreshWorld();priorPaused=state.paused;if(state.running&&!state.paused)togglePause();state.keys.clear();mouseDown=false;opened=true;
       shell();$('artStudio').classList.remove('hidden');document.body.classList.add('artEditing');await list();const e=entry&&inventory().find(e=>e.id===entry.id)||inventory()[0];await select(e,0);info();
       previewTimer=setInterval(()=>{if(opened&&playing&&!busy)previewTick();},33);$('artSearch').focus();
     }catch(e){opened=false;$('artStudio').classList.add('hidden');document.body.classList.remove('artEditing');alert(t('Art Studio could not open: ','美术工作台打开失败：')+e.message);}finally{opening=false;}

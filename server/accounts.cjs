@@ -5,12 +5,13 @@ const {promisify}=require('node:util');
 const Rules=require('../account-rules.js');
 const Progress=require('../account-progress.js');
 const Economy=require('../account-economy.js');
+const DEVELOPER_ID='a3f337f5-dd2d-4cf9-9d17-3cab03af0329';
 const ensureEconomy=u=>u.economy||(u.economy=Economy.initial(Progress.info(u.totalXp).level));
 const derive=promisify(scrypt),SESSION_MS=7*86400000,RUN_MS=86400000;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const fault=(code,status=400)=>Object.assign(new Error(code),{code,status});
 const empty=()=>({schema:1,users:[],sessions:[],runs:[]});
-const summary=(u,now=Date.now())=>({id:u.id,username:u.username,displayName:u.displayName,avatarId:u.avatarId,bestScore:u.bestScore||0,...Progress.info(u.totalXp),nameChangeAvailableAt:u.nameChangedAt?u.nameChangedAt+Progress.RENAME_MS:0,serverTime:now,tokens:ensureEconomy(u).tokens,ownedSkins:[...u.economy.owned],equippedSkin:Economy.get(u.economy.equipped)||Economy.get(Economy.DEFAULT),economyRevision:u.economy.revision,daily:Economy.daily(u.economy,now)});
+const summary=(u,now=Date.now())=>({id:u.id,username:u.username,displayName:u.displayName,avatarId:u.avatarId,canDevelop:u.id===DEVELOPER_ID,bestScore:u.bestScore||0,...Progress.info(u.totalXp),nameChangeAvailableAt:u.nameChangedAt?u.nameChangedAt+Progress.RENAME_MS:0,serverTime:now,tokens:ensureEconomy(u).tokens,ownedSkins:[...u.economy.owned],equippedSkin:Economy.get(u.economy.equipped)||Economy.get(Economy.DEFAULT),economyRevision:u.economy.revision,daily:Economy.daily(u.economy,now)});
 class AccountStore{
   constructor({directory=process.env.DEADTOWN_DATA_DIR||path.join(os.homedir(),'.local','share','deadtown'),now=Date.now}={}){
     this.directory=path.resolve(directory);this.file=path.join(this.directory,'accounts.json');this.lock=path.join(this.directory,'accounts.lock');this.now=now;this.data=empty();this.queue=Promise.resolve();this.opened=false;this.busy=0;this.closed=false;
@@ -118,6 +119,25 @@ class AccountStore{
       return summary(u,this.now());
     });
   }
+  async developerAdjust(token,{kind,delta,requestId}){
+    return this.change(data=>{
+      const session=this.session(token);if(!session)throw fault('auth_required',401);
+      if(session.id!==DEVELOPER_ID)throw fault('developer_forbidden',403);
+      if(!['xp','tokens'].includes(kind)||!Number.isSafeInteger(delta)||delta===0||Math.abs(delta)>1000000||typeof requestId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(requestId))throw fault('developer_invalid');
+      const u=data.users.find(u=>u.id===session.id),e=ensureEconomy(u);
+      const receipts=u.developerAdjustments||(u.developerAdjustments=[]),previous=receipts.find(r=>r.id===requestId);
+      if(previous){
+        if(previous.kind!==kind||previous.delta!==delta)throw fault('developer_conflict',409);
+        return {user:summary(u,this.now()),applied:false};
+      }
+      // Debug changes never settle a run, alter a score, or issue level/task rewards.
+      if(kind==='xp')u.totalXp=Progress.total(Progress.total(u.totalXp)+delta);
+      else e.tokens=Math.max(0,Math.min(1000000000,e.tokens+delta));
+      e.revision++;receipts.push({id:requestId,kind,delta,at:this.now()});
+      if(receipts.length>128)receipts.splice(0,receipts.length-128);
+      return {user:summary(u,this.now()),applied:true};
+    });
+  }
   leaderboard(){this.open();return this.data.users.filter(u=>u.bestScore>0).sort((a,b)=>b.bestScore-a.bestScore||a.bestAt-b.bestAt||a.id.localeCompare(b.id)).slice(0,10).map(u=>({accountId:u.id,player_name:u.displayName,avatarId:u.avatarId,level:Progress.info(u.totalXp).level,best_score:u.bestScore,updated_at:new Date(u.bestAt).toISOString()}));}
   async beginRun(token,accountId){
     return this.change(data=>{
@@ -219,6 +239,7 @@ function createAccountAPI(store,{changed=()=>{},signedOut=()=>{},signedIn=()=>{}
       if(method==='PATCH'&&route==='/api/profile'){const updated=await store.profile(token,fields);changed(updated);return reply(200,{user:updated});}
       if(method==='POST'&&route==='/api/shop/purchase'){const result=await store.purchase(token,fields.skin);changed(result.user);return reply(200,result);}
       if(method==='PATCH'&&route==='/api/appearance'){const updated=await store.equip(token,fields.skin);changed(updated);return reply(200,{user:updated});}
+      if(method==='POST'&&route==='/api/developer/adjust'){const result=await store.developerAdjust(token,fields);changed(result.user);return reply(200,result);}
       if(method==='POST'&&route==='/api/runs'){limit('run:'+user.id,12,60000);return reply(201,await store.beginRun(token,fields.accountId));}
       if(method==='POST'&&route==='/api/scores'){const result=await store.finishRun(token,fields);changed(result.user);return reply(200,result);}
       throw fault('not_found',404);
